@@ -144,7 +144,10 @@ function editReceipt(id, obligationId, amount, dateReceived, method, reference, 
 
 async function loadObligations() {
     try {
-        const response = await fetch('/api/v1/obligations');
+        const response = await fetch('/api/v1/obligations', {
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' }
+        });
         const result = await response.json();
         const select = document.getElementById('obligation-select');
         
@@ -159,7 +162,10 @@ async function loadObligations() {
 
 async function loadReceipts() {
     try {
-        const response = await fetch('/api/v1/receipts');
+        const response = await fetch('/api/v1/receipts', {
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' }
+        });
         const result = await response.json();
         const tbody = document.getElementById('receipts-table');
         
@@ -203,6 +209,7 @@ async function saveReceipt(event) {
         
         const response = await fetch(url, {
             method: method,
+            credentials: 'include',
             body: formData
         });
         const result = await response.json();
@@ -225,7 +232,10 @@ async function deleteReceipt(id) {
     if (!confirm('Are you sure you want to delete this receipt?')) return;
     
     try {
-        const response = await fetch(`/api/v1/receipts/${id}`, { method: 'DELETE' });
+        const response = await fetch(`/api/v1/receipts/${id}`, { 
+            method: 'DELETE',
+            credentials: 'include'
+        });
         const result = await response.json();
         
         if (result.success) {

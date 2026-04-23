@@ -14,7 +14,10 @@
 <script>
 async function loadAudits() {
     try {
-        const response = await fetch('/api/v1/audits');
+        const response = await fetch('/api/v1/audits', {
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' }
+        });
         const result = await response.json();
         const container = document.getElementById('audit-list');
         

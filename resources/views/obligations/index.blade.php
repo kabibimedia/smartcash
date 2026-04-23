@@ -114,7 +114,10 @@ function editObligation(id, title, amount, dueDate, frequency, notes, email = ''
 
 async function loadObligations() {
     try {
-        const response = await fetch('/api/v1/obligations');
+        const response = await fetch('/api/v1/obligations', { 
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' }
+        });
         const result = await response.json();
         const tbody = document.getElementById('obligations-table');
         
@@ -160,10 +163,19 @@ async function saveObligation(event) {
         
         const response = await fetch(url, {
             method: method,
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify(data)
         });
-        const result = await response.json();
+        
+        const text = await response.text();
+        console.log('Response status:', response.status);
+        console.log('Response body:', text);
+        
+        const result = JSON.parse(text);
         
         if (result.success) {
             closeModal();
@@ -171,11 +183,11 @@ async function saveObligation(event) {
             document.querySelector('#modal h3').textContent = 'Add Obligation';
             loadObligations();
         } else {
-            alert('Error: ' + result.message);
+            alert('Error: ' + (result.message || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error saving obligation:', error);
-        alert('Error saving obligation');
+        alert('Error saving obligation: ' + error.message);
     }
 }
 
@@ -183,7 +195,10 @@ async function deleteObligation(id) {
     if (!confirm('Are you sure you want to delete this obligation?')) return;
     
     try {
-        const response = await fetch(`/api/v1/obligations/${id}`, { method: 'DELETE' });
+        const response = await fetch(`/api/v1/obligations/${id}`, { 
+            method: 'DELETE',
+            credentials: 'include'
+        });
         const result = await response.json();
         
         if (result.success) {

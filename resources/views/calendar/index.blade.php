@@ -108,7 +108,10 @@ async function loadReminders() {
     try {
         const userId = {{ session('user_id', 0) }};
         const url = userId > 0 ? `/api/v1/reminders?user_id=${userId}` : '/api/v1/reminders';
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' }
+        });
         const result = await response.json();
         reminders = result.success ? result.data : [];
         renderCalendar();
@@ -295,7 +298,8 @@ async function saveReminder(e) {
     try {
         const response = await fetch(url, {
             method: method,
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(data)
         });
         
@@ -316,7 +320,10 @@ async function deleteReminder(id) {
     if (!confirm('Delete this reminder?')) return;
     
     try {
-        const response = await fetch(`/api/v1/reminders/${id}`, { method: 'DELETE' });
+        const response = await fetch(`/api/v1/reminders/${id}`, { 
+            method: 'DELETE',
+            credentials: 'include'
+        });
         const result = await response.json();
         
         if (result.success) {

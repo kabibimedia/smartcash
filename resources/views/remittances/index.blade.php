@@ -139,7 +139,10 @@ function editRemittance(id, receiptId, amount, date, method, reference, notes, e
 
 async function loadReceipts() {
     try {
-        const response = await fetch('/api/v1/receipts');
+        const response = await fetch('/api/v1/receipts', {
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' }
+        });
         const result = await response.json();
         const select = document.getElementById('receipt-select');
         
@@ -154,7 +157,10 @@ async function loadReceipts() {
 
 async function loadRemittances() {
     try {
-        const response = await fetch('/api/v1/remittances');
+        const response = await fetch('/api/v1/remittances', {
+            credentials: 'include',
+            headers: { 'Accept': 'application/json' }
+        });
         const result = await response.json();
         const tbody = document.getElementById('remittances-table');
         
@@ -198,6 +204,7 @@ async function saveRemittance(event) {
         
         const response = await fetch(url, {
             method: method,
+            credentials: 'include',
             body: formData
         });
         const result = await response.json();
@@ -220,7 +227,10 @@ async function deleteRemittance(id) {
     if (!confirm('Are you sure you want to delete this remittance?')) return;
     
     try {
-        const response = await fetch(`/api/v1/remittances/${id}`, { method: 'DELETE' });
+        const response = await fetch(`/api/v1/remittances/${id}`, { 
+            method: 'DELETE',
+            credentials: 'include'
+        });
         const result = await response.json();
         
         if (result.success) {

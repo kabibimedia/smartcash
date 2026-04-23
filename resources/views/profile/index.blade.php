@@ -134,10 +134,10 @@ async function loadProfile() {
         document.getElementById('user-name').textContent = userName;
         
         const [obRes, recRes, remRes, userRes] = await Promise.all([
-            fetch('/api/v1/obligations'),
-            fetch('/api/v1/receipts'),
-            fetch('/api/v1/remittances'),
-            userId > 0 ? fetch('/api/v1/users/' + userId) : Promise.reject()
+            fetch('/api/v1/obligations', { credentials: 'include', headers: { 'Accept': 'application/json' } }),
+            fetch('/api/v1/receipts', { credentials: 'include', headers: { 'Accept': 'application/json' } }),
+            fetch('/api/v1/remittances', { credentials: 'include', headers: { 'Accept': 'application/json' } }),
+            userId > 0 ? fetch('/api/v1/users/' + userId, { credentials: 'include', headers: { 'Accept': 'application/json' } }) : Promise.reject()
         ]);
         
         const obs = await obRes.json();
@@ -160,7 +160,7 @@ async function loadProfile() {
             document.getElementById('total-received').textContent = formatCurrency(totalRec);
         }
         
-        if (rms.success) {
+        if (rems.success) {
             const totalRem = rms.data.reduce((sum, r) => sum + parseFloat(r.amount_paid || 0), 0);
             document.getElementById('total-remitted').textContent = formatCurrency(totalRem);
         }
@@ -200,8 +200,10 @@ async function saveProfile(e) {
     try {
         const response = await fetch('/api/v1/profile/' + userId, {
             method: 'PUT',
+            credentials: 'include',
             headers: { 
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'X-User-Id': userId
             },
             body: JSON.stringify({
@@ -243,8 +245,10 @@ document.getElementById('password-form').addEventListener('submit', async functi
         const userId = {{ session('user_id', 0) }};
         const res = await fetch('/api/v1/profile/password', {
             method: 'POST',
+            credentials: 'include',
             headers: { 
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'X-User-Id': userId
             },
             body: JSON.stringify({
