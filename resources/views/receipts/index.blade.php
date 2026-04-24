@@ -146,7 +146,10 @@ async function loadObligations() {
     try {
         const response = await fetch('/api/v1/obligations', {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 
+                'Accept': 'application/json',
+                'X-User-Id': smartcashUserId.toString()
+            }
         });
         const result = await response.json();
         const select = document.getElementById('obligation-select');
@@ -162,9 +165,12 @@ async function loadObligations() {
 
 async function loadReceipts() {
     try {
-        const response = await fetch('/api/v1/receipts', {
+        const response = await fetch('/api/v1/receipts?v=' + Date.now(), {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 
+                'Accept': 'application/json',
+                'X-User-Id': smartcashUserId.toString()
+            }
         });
         const result = await response.json();
         const tbody = document.getElementById('receipts-table');
@@ -182,8 +188,8 @@ async function loadReceipts() {
                     </td>
                     <td class="py-3 px-4 text-xs text-gray-500">${receipt.created_at_timestamp}</td>
                     <td class="py-3 px-4">
-                        <button onclick="editReceipt(${receipt.id}, ${receipt.obligation_id}, ${receipt.amount_received}, '${receipt.input_date_received}', '${receipt.payment_method}', '${receipt.reference || ''}', '${receipt.notes || ''}', '${receipt.email || ''}', '${receipt.image_url || ''}')" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
-                        <button onclick="deleteReceipt(${receipt.id})" class="text-red-600 hover:text-red-800">Delete</button>
+                        <button onclick="confirmEditReceipt(${receipt.id}, ${receipt.obligation_id}, ${receipt.amount_received}, '${receipt.input_date_received}', '${receipt.payment_method}', '${receipt.reference || ''}', '${receipt.notes || ''}', '${receipt.email || ''}', '${receipt.image_url || ''}')" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
+                        <button onclick="confirmDeleteReceipt(${receipt.id})" class="text-red-600 hover:text-red-800">Delete</button>
                     </td>
                 </tr>
             `).join('');
@@ -202,23 +208,36 @@ async function saveReceipt(event) {
     
     const id = document.getElementById('receipt-id').value;
     const isEdit = id && id !== '';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
     try {
         const url = isEdit ? `/api/v1/receipts/${id}` : '/api/v1/receipts';
         const method = isEdit ? 'PUT' : 'POST';
         
+        // Log what we're sending
+        for (let pair of formData.entries()) {
+            console.log('FormData:', pair[0], '=', pair[1]);
+        }
+        
         const response = await fetch(url, {
             method: method,
             credentials: 'include',
+            headers: { 
+                'X-User-Id': smartcashUserId.toString(),
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
             body: formData
         });
+        
         const result = await response.json();
         
         if (result.success) {
             closeModal();
             form.reset();
             document.querySelector('#modal h3').textContent = 'Record Receipt';
-            loadReceipts();
+            await loadReceipts();
+            alert(isEdit ? 'Receipt updated successfully!' : 'Receipt recorded successfully!');
         } else {
             alert('Error: ' + result.message);
         }
@@ -229,21 +248,37 @@ async function saveReceipt(event) {
 }
 
 async function deleteReceipt(id) {
-    if (!confirm('Are you sure you want to delete this receipt?')) return;
+    if (!confirm('Are you sure you want to DELETE this receipt? This cannot be undone.')) return;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
     try {
         const response = await fetch(`/api/v1/receipts/${id}`, { 
             method: 'DELETE',
-            credentials: 'include'
+            credentials: 'include',
+            headers: { 
+                'X-User-Id': smartcashUserId.toString(),
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            }
         });
         const result = await response.json();
         
         if (result.success) {
             loadReceipts();
+            alert('Receipt deleted successfully!');
         }
     } catch (error) {
         console.error('Error deleting receipt:', error);
     }
+}
+
+function confirmEditReceipt(id, obligationId, amount, dateReceived, method, reference, notes, email, imageUrl) {
+    if (!confirm('Are you sure you want to edit this receipt?')) return;
+    editReceipt(id, obligationId, amount, dateReceived, method, reference, notes, email, imageUrl);
+}
+
+function confirmDeleteReceipt(id) {
+    deleteReceipt(id);
 }
 
 loadReceipts();

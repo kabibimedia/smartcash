@@ -134,10 +134,10 @@ async function loadProfile() {
         document.getElementById('user-name').textContent = userName;
         
         const [obRes, recRes, remRes, userRes] = await Promise.all([
-            fetch('/api/v1/obligations', { credentials: 'include', headers: { 'Accept': 'application/json' } }),
-            fetch('/api/v1/receipts', { credentials: 'include', headers: { 'Accept': 'application/json' } }),
-            fetch('/api/v1/remittances', { credentials: 'include', headers: { 'Accept': 'application/json' } }),
-            userId > 0 ? fetch('/api/v1/users/' + userId, { credentials: 'include', headers: { 'Accept': 'application/json' } }) : Promise.reject()
+            fetch('/api/v1/obligations', { credentials: 'include', headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() } }),
+            fetch('/api/v1/receipts', { credentials: 'include', headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() } }),
+            fetch('/api/v1/remittances', { credentials: 'include', headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() } }),
+            userId > 0 ? fetch('/api/v1/users/' + userId, { credentials: 'include', headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() } }) : Promise.reject()
         ]);
         
         const obs = await obRes.json();
@@ -196,6 +196,7 @@ async function saveProfile(e) {
     const userId = {{ session('user_id', 0) }};
     const form = document.getElementById('profile-form');
     const formData = new FormData(form);
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
     try {
         const response = await fetch('/api/v1/profile/' + userId, {
@@ -204,7 +205,8 @@ async function saveProfile(e) {
             headers: { 
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'X-User-Id': userId
+                'X-User-Id': smartcashUserId.toString(),
+                'X-CSRF-TOKEN': csrfToken
             },
             body: JSON.stringify({
                 name: formData.get('name'),
@@ -243,13 +245,16 @@ document.getElementById('password-form').addEventListener('submit', async functi
     
     try {
         const userId = {{ session('user_id', 0) }};
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        
         const res = await fetch('/api/v1/profile/password', {
             method: 'POST',
             credentials: 'include',
             headers: { 
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'X-User-Id': userId
+                'X-User-Id': smartcashUserId.toString(),
+                'X-CSRF-TOKEN': csrfToken
             },
             body: JSON.stringify({
                 current_password: formData.get('current_password'),

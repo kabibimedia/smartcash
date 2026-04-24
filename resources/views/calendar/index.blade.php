@@ -84,7 +84,7 @@
                 </div>
                 <div id="repeat-until-field" class="hidden">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Repeat Until</label>
-                    <input type="date" name="repeat_until" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                    <input type="date" name="repeat_until" max="{{ date('Y-m-d') }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Notify Additional Email</label>
@@ -110,7 +110,7 @@ async function loadReminders() {
         const url = userId > 0 ? `/api/v1/reminders?user_id=${userId}` : '/api/v1/reminders';
         const response = await fetch(url, {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() }
         });
         const result = await response.json();
         reminders = result.success ? result.data : [];
@@ -299,7 +299,7 @@ async function saveReminder(e) {
         const response = await fetch(url, {
             method: method,
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() },
             body: JSON.stringify(data)
         });
         
@@ -322,7 +322,8 @@ async function deleteReminder(id) {
     try {
         const response = await fetch(`/api/v1/reminders/${id}`, { 
             method: 'DELETE',
-            credentials: 'include'
+            credentials: 'include',
+            headers: { 'X-User-Id': smartcashUserId.toString() }
         });
         const result = await response.json();
         

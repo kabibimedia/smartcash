@@ -135,8 +135,8 @@ async function loadObligations() {
                         <span class="px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(obs.status)}">${obs.status}</span>
                     </td>
                     <td class="py-3 px-4">
-                        <button onclick="editObligation(${obs.id}, '${obs.title}', ${obs.amount_expected}, '${obs.input_due_date}', '${obs.frequency}', '${obs.notes || ''}', '${obs.email || ''}')" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
-                        <button onclick="deleteObligation(${obs.id})" class="text-red-600 hover:text-red-800">Delete</button>
+                        <button onclick="confirmEditObligation(${obs.id}, '${obs.title}', ${obs.amount_expected}, '${obs.input_due_date}', '${obs.frequency}', '${obs.notes || ''}', '${obs.email || ''}')" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
+                        <button onclick="confirmDeleteObligation(${obs.id}, '${obs.title}')" class="text-red-600 hover:text-red-800">Delete</button></button>
                     </td>
                 </tr>
             `).join('');
@@ -156,6 +156,7 @@ async function saveObligation(event) {
     
     const id = document.getElementById('obligation-id').value;
     const isEdit = id && id !== '';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
     try {
         const url = isEdit ? `/api/v1/obligations/${id}` : '/api/v1/obligations';
@@ -166,7 +167,9 @@ async function saveObligation(event) {
             credentials: 'include',
             headers: { 
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'X-User-Id': smartcashUserId.toString(),
+                'X-CSRF-TOKEN': csrfToken
             },
             body: JSON.stringify(data)
         });
@@ -182,6 +185,7 @@ async function saveObligation(event) {
             form.reset();
             document.querySelector('#modal h3').textContent = 'Add Obligation';
             loadObligations();
+            alert(isEdit ? 'Obligation updated successfully!' : 'Obligation created successfully!');
         } else {
             alert('Error: ' + (result.message || 'Unknown error'));
         }
@@ -192,17 +196,24 @@ async function saveObligation(event) {
 }
 
 async function deleteObligation(id) {
-    if (!confirm('Are you sure you want to delete this obligation?')) return;
+    if (!confirm('Are you sure you want to DELETE this obligation? This cannot be undone.')) return;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
     try {
         const response = await fetch(`/api/v1/obligations/${id}`, { 
             method: 'DELETE',
-            credentials: 'include'
+            credentials: 'include',
+            headers: { 
+                'X-User-Id': smartcashUserId.toString(),
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            }
         });
         const result = await response.json();
         
         if (result.success) {
             loadObligations();
+            alert('Obligation deleted successfully!');
         }
     } catch (error) {
         console.error('Error deleting obligation:', error);
@@ -218,6 +229,16 @@ function getStatusClass(status) {
         'overdue': 'bg-red-200 text-red-700'
     };
     return classes[status] || 'bg-gray-200 text-gray-700';
+}
+
+function confirmEditObligation(id, title, amount, dueDate, frequency, notes, email) {
+    if (!confirm('Are you sure you want to edit "' + title + '"?')) return;
+    editObligation(id, title, amount, dueDate, frequency, notes, email);
+}
+
+function confirmDeleteObligation(id, title) {
+    if (!confirm('Are you sure you want to DELETE "' + title + '"? This cannot be undone.')) return;
+    deleteObligation(id);
 }
 
 loadObligations();

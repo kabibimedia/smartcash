@@ -159,7 +159,10 @@ async function loadRemittances() {
     try {
         const response = await fetch('/api/v1/remittances', {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 
+                'Accept': 'application/json',
+                'X-User-Id': smartcashUserId.toString()
+            }
         });
         const result = await response.json();
         const tbody = document.getElementById('remittances-table');
@@ -177,8 +180,8 @@ async function loadRemittances() {
                     </td>
                     <td class="py-3 px-4 text-xs text-gray-500">${rem.created_at_timestamp}</td>
                     <td class="py-3 px-4">
-                        <button onclick="editRemittance(${rem.id}, ${rem.receipt_id}, ${rem.amount_paid}, '${rem.input_date_paid}', '${rem.payment_method}', '${rem.reference || ''}', '${rem.notes || ''}', '${rem.email || ''}', '${rem.image_url || ''}')" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
-                        <button onclick="deleteRemittance(${rem.id})" class="text-red-600 hover:text-red-800">Delete</button>
+                        <button onclick="confirmEditRemittance(${rem.id}, ${rem.receipt_id}, ${rem.amount_paid}, '${rem.input_date_paid}', '${rem.payment_method}', '${rem.reference || ''}', '${rem.notes || ''}', '${rem.email || ''}', '${rem.image_url || ''}')" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
+                        <button onclick="confirmDeleteRemittance(${rem.id})" class="text-red-600 hover:text-red-800">Delete</button>
                     </td>
                 </tr>
             `).join('');
@@ -197,6 +200,7 @@ async function saveRemittance(event) {
     
     const id = document.getElementById('remittance-id').value;
     const isEdit = id && id !== '';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
     try {
         const url = isEdit ? `/api/v1/remittances/${id}` : '/api/v1/remittances';
@@ -205,6 +209,11 @@ async function saveRemittance(event) {
         const response = await fetch(url, {
             method: method,
             credentials: 'include',
+            headers: { 
+                'X-User-Id': smartcashUserId.toString(),
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
             body: formData
         });
         const result = await response.json();
@@ -214,6 +223,7 @@ async function saveRemittance(event) {
             form.reset();
             document.querySelector('#modal h3').textContent = 'Record Payment to Boss';
             loadRemittances();
+            alert(isEdit ? 'Payment updated successfully!' : 'Payment recorded successfully!');
         } else {
             alert('Error: ' + result.message);
         }
@@ -224,21 +234,37 @@ async function saveRemittance(event) {
 }
 
 async function deleteRemittance(id) {
-    if (!confirm('Are you sure you want to delete this remittance?')) return;
+    if (!confirm('Are you sure you want to DELETE this payment? This cannot be undone.')) return;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
     try {
         const response = await fetch(`/api/v1/remittances/${id}`, { 
             method: 'DELETE',
-            credentials: 'include'
+            credentials: 'include',
+            headers: { 
+                'X-User-Id': smartcashUserId.toString(),
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            }
         });
         const result = await response.json();
         
         if (result.success) {
             loadRemittances();
+            alert('Payment deleted successfully!');
         }
     } catch (error) {
         console.error('Error deleting remittance:', error);
     }
+}
+
+function confirmEditRemittance(id, receiptId, amount, datePaid, method, reference, notes, email, imageUrl) {
+    if (!confirm('Are you sure you want to edit this payment?')) return;
+    editRemittance(id, receiptId, amount, datePaid, method, reference, notes, email, imageUrl);
+}
+
+function confirmDeleteRemittance(id) {
+    deleteRemittance(id);
 }
 
 function formatCurrency(amount) {

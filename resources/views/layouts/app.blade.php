@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'SmartCash')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script>
+        // Define smartcashUserId EARLY before any page scripts
+        var smartcashUserId = {{ session('user_id', 0) }};
+        if (!smartcashUserId && document.cookie) {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var c = cookies[i].trim();
+                if (c.indexOf('smartcash_uid=') === 0) {
+                    var val = c.substring('smartcash_uid='.length);
+                    if (val && !isNaN(val)) {
+                        smartcashUserId = parseInt(val, 10);
+                    }
+                    break;
+                }
+            }
+        }
+    </script>
 </head>
 <body class="bg-gray-100 text-gray-900">
     <div class="min-h-screen flex">
@@ -50,15 +68,19 @@
             </div>
         </aside>
         <main class="flex-1">
-            <header class="bg-white border-b border-gray-200 px-6 py-4">
+            <header class="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
                 <div class="flex items-center justify-between">
                     <h2 class="text-lg font-semibold">@yield('header', 'Dashboard')</h2>
-                    <div class="flex items-center gap-4">
-                        @if(session('user') === 'Admin')
-                        <a href="{{ route('users') }}" class="text-sm text-gray-700 hover:text-gray-900">Users</a>
+                    <div class="flex items-center gap-2 sm:gap-4">
+                        @if(session('message'))
+                        <span class="text-sm text-green-600 font-medium">{{ session('message') }}</span>
+                        @php(session()->forget('message'))
                         @endif
-                        <span class="text-sm text-gray-500">{{ session('user') }}</span>
-                        <a href="{{ route('profile') }}" class="text-sm text-gray-700 hover:text-gray-900">Profile</a>
+                        @if(session('user') === 'Admin')
+                        <a href="{{ route('users') }}" class="text-sm text-gray-700 hover:text-gray-900 hidden sm:inline">Users</a>
+                        @endif
+                        <span class="text-sm text-gray-500 hidden sm:inline">{{ session('user') }}</span>
+                        <a href="{{ route('profile') }}" class="text-sm text-gray-700 hover:text-gray-900 hidden sm:inline">Profile</a>
                         <a href="{{ route('logout') }}" class="text-sm text-red-600 hover:text-red-800">Logout</a>
                     </div>
                 </div>

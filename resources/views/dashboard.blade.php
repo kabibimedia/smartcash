@@ -66,12 +66,18 @@
 
 <script>
 async function loadDashboard() {
+    console.log('loadDashboard called, smartcashUserId:', smartcashUserId);
     try {
         const response = await fetch('/api/v1/reports/dashboard', {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 
+                'Accept': 'application/json', 
+                'X-User-Id': smartcashUserId.toString() 
+            }
         });
+        console.log('Dashboard response status:', response.status);
         const result = await response.json();
+        console.log('Dashboard result:', result);
         
         if (result.success) {
             const data = result.data;
@@ -93,7 +99,7 @@ async function loadRecentObligations() {
     try {
         const response = await fetch('/api/v1/obligations', {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() }
         });
         const result = await response.json();
         

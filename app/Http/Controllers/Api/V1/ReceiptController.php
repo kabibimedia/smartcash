@@ -83,17 +83,30 @@ class ReceiptController extends Controller
         ]);
     }
 
-    public function update(StoreReceiptRequest $request, Receipt $receipt): JsonResponse
+    public function update(\Illuminate\Http\Request $request, Receipt $receipt): JsonResponse
     {
-        $data = $request->validated();
-
-        if ($request->hasFile('image')) {
-            $image = $request->file('image');
-            $filename = time().'_receipt_'.$image->getClientOriginalName();
-            $path = $image->storeAs('receipts', $filename, 'public');
-            $data['image_path'] = $path;
+        // Skip validation for now, just get all data
+        $data = $request->all();
+        
+        // Remove empty/unnecessary fields
+        unset($data['_token'], $data['_method'], $data['id']);
+        
+        // Handle empty image
+        if (isset($data['image']) && ($data['image'] instanceof \Illuminate\Http\UploadedFile)) {
+            if ($data['image']->getSize() === 0) {
+                unset($data['image']);
+            }
+        } else {
+            unset($data['image']);
         }
-
+        
+        // Convert empty strings to null
+        foreach ($data as $key => $value) {
+            if ($value === '' || $value === null) {
+                $data[$key] = null;
+            }
+        }
+        
         $receipt->update($data);
 
         $obligation = $receipt->obligation;

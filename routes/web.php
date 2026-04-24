@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\RestoreSessionMiddleware;
 use App\Models\User;
 use App\Notifications\WelcomeNotification;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ Route::post('/login', function (Request $request) {
     if ($admin && Hash::check($password, $admin->password) && (strtolower($login) === 'admin' || $login === 'admin@smartcash.com')) {
         session(['user' => $admin->name, 'user_id' => $admin->id]);
 
-        return redirect('/dashboard');
+        return redirect('/dashboard')->withCookie(cookie('smartcash_uid', $admin->id, 120));
     }
 
     $user = User::where('email', $login)
@@ -30,10 +31,10 @@ Route::post('/login', function (Request $request) {
     if ($user && Hash::check($password, $user->password)) {
         session(['user' => $user->name, 'user_id' => $user->id]);
 
-        return redirect('/dashboard');
+        return redirect('/dashboard')->withCookie(cookie('smartcash_uid', $user->id, 120));
     }
 
-    return back()->with('error', 'Invalid credentials');
+    return back()->with('error', 'Invalid credentials')->withInput();
 })->name('login.post');
 
 Route::post('/register', function (Request $request) {
@@ -55,13 +56,13 @@ Route::post('/register', function (Request $request) {
 
     session(['user' => $user->name, 'user_id' => $user->id]);
 
-    return redirect('/dashboard');
+    return redirect('/dashboard')->withCookie(cookie('smartcash_uid', $user->id, 120));
 })->name('register');
 
 Route::get('/logout', function () {
     session()->flush();
 
-    return redirect('/login');
+    return redirect('/login')->withCookie(cookie('smartcash_uid', null, -1));
 })->name('logout');
 
 Route::get('/forgot-password', function () {
@@ -79,70 +80,6 @@ Route::post('/forgot-password', function (Request $request) {
     return back()->with('error', 'No account found with that email');
 })->name('password.email');
 
-Route::get('/dashboard', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('dashboard');
-})->name('dashboard');
-
-Route::get('/obligations', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('obligations.index');
-})->name('obligations');
-
-Route::get('/receipts', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('receipts.index');
-})->name('receipts');
-
-Route::get('/remittances', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('remittances.index');
-})->name('remittances');
-
-Route::get('/reports', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('reports.index');
-})->name('reports');
-
-Route::get('/profile', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('profile.index');
-})->name('profile');
-
-Route::get('/calendar', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('calendar.index');
-})->name('calendar');
-
-Route::get('/users', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('users.index');
-})->name('users');
-
 Route::get('/test-email', function () {
     try {
         Mail::raw('Test email from browser - '.date('H:i:s'), function ($m) {
@@ -155,10 +92,14 @@ Route::get('/test-email', function () {
     }
 });
 
-Route::get('/audits', function () {
-    if (! session()->has('user')) {
-        return redirect('/login');
-    }
-
-    return view('audits.index');
-})->name('audits');
+Route::middleware([RestoreSessionMiddleware::class])->group(function () {
+    Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
+    Route::get('/obligations', fn () => view('obligations.index'))->name('obligations');
+    Route::get('/receipts', fn () => view('receipts.index'))->name('receipts');
+    Route::get('/remittances', fn () => view('remittances.index'))->name('remittances');
+    Route::get('/reports', fn () => view('reports.index'))->name('reports');
+    Route::get('/profile', fn () => view('profile.index'))->name('profile');
+    Route::get('/calendar', fn () => view('calendar.index'))->name('calendar');
+    Route::get('/users', fn () => view('users.index'))->name('users');
+    Route::get('/audits', fn () => view('audits.index'))->name('audits');
+});

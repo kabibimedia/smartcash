@@ -3,7 +3,8 @@
 namespace App\Services;
 
 use App\Models\Audit;
-use Illuminate\Support\Facades\Request;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Request as FacadesRequest;
 
 class AuditService
 {
@@ -14,7 +15,14 @@ class AuditService
         ?array $oldValues = null,
         ?array $newValues = null
     ): void {
-        $userId = session('user_id');
+        $request = FacadesRequest::instance();
+        $userId = $request->cookie('smartcash_uid');
+        
+        if ($userId && is_numeric($userId)) {
+            $userId = (int) $userId;
+        } else {
+            $userId = null;
+        }
 
         Audit::create([
             'user_id' => $userId,
@@ -23,7 +31,7 @@ class AuditService
             'entity_id' => $entityId,
             'old_values' => $oldValues ? json_encode($oldValues) : null,
             'new_values' => $newValues ? json_encode($newValues) : null,
-            'ip_address' => Request::ip(),
+            'ip_address' => $request->ip(),
         ]);
     }
 }

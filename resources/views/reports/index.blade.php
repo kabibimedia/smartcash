@@ -33,8 +33,20 @@
 <div class="bg-white rounded-xl border border-gray-200 p-4 md:p-6">
     <h3 class="text-lg font-semibold mb-4">Full Statement</h3>
     <div class="flex flex-wrap gap-2 mb-4">
-        <input type="date" id="from-date" class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm" value="{{ date('Y-01-01') }}">
-        <input type="date" id="to-date" class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm" value="{{ date('Y-m-d') }}">
+        <?php 
+        $year = date('Y'); 
+        $month = date('m'); 
+        $day = date('d');
+        $today = "$year-$month-$day";
+        ?>
+        <input type="date" id="from-date" max="{{ $today }}" class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm" value="{{ $year }}-01-01">
+        <input type="date" id="to-date" max="{{ $today }}" class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm" value="{{ $today }}">
+        <select id="statement-type" class="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option value="all">All Records</option>
+            <option value="obligation">Obligations Only</option>
+            <option value="receipt">Receipts Only</option>
+            <option value="remittance">Payments Only</option>
+        </select>
         <button onclick="loadStatement()" class="bg-gray-800 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-700 text-sm">View</button>
         <button onclick="exportExcel()" class="bg-gray-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-500 text-sm">Excel</button>
         <button onclick="exportPdf()" class="bg-gray-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-500 text-sm">PDF</button>
@@ -67,7 +79,7 @@ async function loadMonthly() {
     try {
         const response = await fetch(`/api/v1/reports/monthly?month=${month}&year=${year}`, {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() }
         });
         const result = await response.json();
         const container = document.getElementById('monthly-summary');
@@ -108,7 +120,7 @@ async function loadOutstanding() {
     try {
         const response = await fetch('/api/v1/reports/outstanding', {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() }
         });
         const result = await response.json();
         const container = document.getElementById('outstanding-list');
@@ -138,7 +150,7 @@ async function loadOverdue() {
     try {
         const response = await fetch('/api/v1/reports/overdue', {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() }
         });
         const result = await response.json();
         const container = document.getElementById('overdue-list');
@@ -167,39 +179,87 @@ async function loadOverdue() {
 async function loadStatement() {
     const from = document.getElementById('from-date').value;
     const to = document.getElementById('to-date').value;
+    const type = document.getElementById('statement-type').value;
     
     try {
-        const response = await fetch(`/api/v1/reports/statement?from=${from}&to=${to}`, {
+        const response = await fetch(`/api/v1/reports/statement?from=${from}&to=${to}&type=${type}`, {
             credentials: 'include',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() }
         });
         const result = await response.json();
         const tbody = document.getElementById('statement-table');
         
         console.log('Statement result:', result);
         
-        if (result.success && result.data.obligations && result.data.obligations.length > 0) {
-            tbody.innerHTML = result.data.obligations.map(obs => {
-                const receivedTotal = obs.received.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
-                const remittedTotal = obs.remitted.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
-                
-                return `
+        const obligations = result.data.obligations || [];
+        const receipts = result.data.receipts || [];
+        const remittances = result.data.remittances || [];
+        
+        if (type === 'all' || type === 'obligation') {
+            if (obligations.length > 0) {
+                tbody.innerHTML = obligations.map(obs => {
+                    const receivedTotal = obs.received.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+                    const remittedTotal = obs.remitted.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+                    
+                    return `
+                        <tr class="border-b border-gray-100 hover:bg-gray-50">
+                            <td class="py-3 px-3">
+                                <p class="font-medium text-sm">${obs.obligation.title}</p>
+                                <p class="text-xs text-gray-500">${obs.obligation.formatted_due_date || obs.obligation.due_date}</p>
+                            </td>
+                            <td class="py-3 px-3 text-sm">${formatCurrency(obs.obligation.amount_expected)}</td>
+                            <td class="py-3 px-3 text-sm text-green-600">${formatCurrency(obs.amount_received || receivedTotal)}</td>
+                            <td class="py-3 px-3 text-sm text-blue-600">${formatCurrency(obs.amount_remitted || remittedTotal)}</td>
+                            <td class="py-3 px-3">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(obs.status)}">${obs.status}</span>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } else if (type === 'obligation') {
+                tbody.innerHTML = '<tr><td colspan="5" class="py-4 px-3 text-center text-gray-500">No obligations found</td></tr>';
+            }
+        } else if (type === 'receipt') {
+            if (receipts.length > 0) {
+                tbody.innerHTML = receipts.map(rec => `
                     <tr class="border-b border-gray-100 hover:bg-gray-50">
                         <td class="py-3 px-3">
-                            <p class="font-medium text-sm">${obs.obligation.title}</p>
-                            <p class="text-xs text-gray-500">${obs.obligation.formatted_due_date || obs.obligation.due_date}</p>
+                            <p class="font-medium text-sm">Receipt: ${rec.obligation_title || 'N/A'}</p>
+                            <p class="text-xs text-gray-500">${rec.date}</p>
                         </td>
-                        <td class="py-3 px-3 text-sm">${formatCurrency(obs.obligation.amount_expected)}</td>
-                        <td class="py-3 px-3 text-sm text-green-600">${formatCurrency(obs.amount_received || receivedTotal)}</td>
-                        <td class="py-3 px-3 text-sm text-blue-600">${formatCurrency(obs.amount_remitted || remittedTotal)}</td>
-                        <td class="py-3 px-3">
-                            <span class="px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(obs.status)}">${obs.status}</span>
-                        </td>
+                        <td class="py-3 px-3 text-sm">-</td>
+                        <td class="py-3 px-3 text-sm text-green-600">${formatCurrency(rec.amount)}</td>
+                        <td class="py-3 px-3 text-sm">-</td>
+                        <td class="py-3 px-3 text-sm text-gray-500">Receipt</td>
                     </tr>
-                `;
-            }).join('');
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" class="py-4 px-3 text-center text-gray-500">No receipts found</td></tr>';
+            }
+        } else if (type === 'remittance') {
+            if (remittances.length > 0) {
+                tbody.innerHTML = remittances.map(rem => `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="py-3 px-3">
+                            <p class="font-medium text-sm">Payment: ${rem.obligation_title || 'N/A'}</p>
+                            <p class="text-xs text-gray-500">${rem.date}</p>
+                        </td>
+                        <td class="py-3 px-3 text-sm">-</td>
+                        <td class="py-3 px-3 text-sm">-</td>
+                        <td class="py-3 px-3 text-sm text-blue-600">${formatCurrency(rem.amount)}</td>
+                        <td class="py-3 px-3 text-sm text-gray-500">Payment</td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" class="py-4 px-3 text-center text-gray-500">No payments found</td></tr>';
+            }
         } else {
             tbody.innerHTML = '<tr><td colspan="5" class="py-4 px-3 text-center text-gray-500">No records found</td></tr>';
+        }
+        
+        if (result.data.summary) {
+            const sum = result.data.summary;
+            console.log(`Summary: Expected=${sum.total_expected}, Received=${sum.total_received}, Remitted=${sum.total_remitted}`);
         }
     } catch (error) {
         console.error('Error loading statement:', error);
@@ -225,13 +285,13 @@ loadOverdue();
 function exportExcel() {
     const from = document.getElementById('from-date').value;
     const to = document.getElementById('to-date').value;
-    window.open(`/api/v1/reports/export/excel?from=${from}&to=${to}`, '_blank');
+    window.open(`/api/v1/reports/export/excel?from=${from}&to=${to}&user_id=${smartcashUserId}`, '_blank');
 }
 
 function exportPdf() {
     const from = document.getElementById('from-date').value;
     const to = document.getElementById('to-date').value;
-    window.open(`/api/v1/reports/export/pdf?from=${from}&to=${to}`, '_blank');
+    window.open(`/api/v1/reports/export/pdf?from=${from}&to=${to}&user_id=${smartcashUserId}`, '_blank');
 }
 </script>
 @endsection

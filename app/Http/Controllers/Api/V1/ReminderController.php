@@ -8,19 +8,52 @@ use App\Models\Reminder;
 use App\Models\User;
 use App\Notifications\ReminderNotification;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ReminderController extends Controller
 {
-    public function index(): JsonResponse
+    private function getUserId(Request $request): ?int
     {
-        $userId = session('user_id');
+        $headerUserId = $request->header('X-User-Id');
+        if ($headerUserId) {
+            $id = (int) $headerUserId;
+            if ($id > 0) {
+                return $id;
+            }
+        }
+        
+        $userId = $request->cookie('smartcash_uid');
+        if ($userId) {
+            $id = (int) $userId;
+            if ($id > 0) {
+                return $id;
+            }
+        }
+        
+        $sessionUserId = session('user_id');
+        if ($sessionUserId) {
+            $id = (int) $sessionUserId;
+            if ($id > 0) {
+                return $id;
+            }
+        }
+        
+        return null;
+    }
 
-        if (! $userId && request()->has('user_id')) {
-            $userId = request('user_id');
+    public function index(Request $request): JsonResponse
+    {
+        $userId = $this->getUserId($request);
+        
+        if (! $userId) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+            ]);
         }
 
         $reminders = Reminder::query()
-            ->when($userId, fn ($q) => $q->where('user_id', $userId))
+            ->where('user_id', $userId)
             ->orderBy('reminder_at', 'asc')
             ->get();
 
@@ -32,32 +65,28 @@ class ReminderController extends Controller
 
     public function store(StoreReminderRequest $request): JsonResponse
     {
-        $data = $request->validated();
-        $userId = session('user_id');
-
-        if (! $userId && $request->has('user_id')) {
-            $userId = $request->input('user_id');
+        $userId = $this->getUserId($request);
+        
+        if (! $userId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authentication required. Please login again.'
+            ], 401);
         }
 
-        if ($userId && $userId > 0) {
-            $data['user_id'] = $userId;
-        }
+        $validated = $request->validated();
+        $validated['user_id'] = $userId;
 
-        $reminder = Reminder::create($data);
+        $reminder = Reminder::create($validated);
 
         $emails = [];
-
-        if ($userId && $userId > 0) {
-            $user = User::find($userId);
-            if ($user && $user->email) {
-                $emails[] = $user->email;
-            }
+        $user = User::find($userId);
+        if ($user && $user->email) {
+            $emails[] = $user->email;
         }
-
         if ($reminder->email && ! in_array($reminder->email, $emails)) {
             $emails[] = $reminder->email;
         }
-
         foreach ($emails as $email) {
             $reminder->notify(new ReminderNotification($reminder));
         }
@@ -69,8 +98,12 @@ class ReminderController extends Controller
         ], 201);
     }
 
-    public function show(Reminder $reminder): JsonResponse
+    public function show(Request $request, Reminder $reminder): JsonResponse
     {
+        $userId = $this->getUserId($request);
+        if ($userId && $reminder->user_id !== $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
         return response()->json([
             'success' => true,
             'data' => $reminder,
@@ -79,6 +112,11 @@ class ReminderController extends Controller
 
     public function update(StoreReminderRequest $request, Reminder $reminder): JsonResponse
     {
+        $userId = $this->getUserId($request);
+        if ($userId && $reminder->user_id !== $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $reminder->update($request->validated());
 
         return response()->json([
@@ -88,8 +126,13 @@ class ReminderController extends Controller
         ]);
     }
 
-    public function destroy(Reminder $reminder): JsonResponse
+    public function destroy(Request $request, Reminder $reminder): JsonResponse
     {
+        $userId = $this->getUserId($request);
+        if ($userId && $reminder->user_id !== $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $reminder->delete();
 
         return response()->json([

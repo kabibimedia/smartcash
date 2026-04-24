@@ -9,16 +9,54 @@ use App\Models\Remittance;
 use App\Models\User;
 use App\Notifications\RemittanceAddedNotification;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class RemittanceController extends Controller
 {
-    public function index(): JsonResponse
+    private function getUserId(Request $request): ?int
     {
-        $userId = session('user_id');
+        $headerUserId = $request->header('X-User-Id');
+        if ($headerUserId) {
+            $id = (int) $headerUserId;
+            if ($id > 0) {
+                return $id;
+            }
+        }
+        
+        $userId = $request->cookie('smartcash_uid');
+        if ($userId) {
+            $id = (int) $userId;
+            if ($id > 0) {
+                return $id;
+            }
+        }
+        
+        $sessionUserId = session('user_id');
+        if ($sessionUserId) {
+            $id = (int) $sessionUserId;
+            if ($id > 0) {
+                return $id;
+            }
+        }
+        
+        return null;
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        $userId = $this->getUserId($request);
+        
+        if (! $userId) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+            ]);
+        }
 
         $remittances = Remittance::query()
-            ->when($userId, fn ($q, $id) => $q->where('user_id', $id))
-            ->when(request('from') && request('to'), fn ($q) => $q->whereBetween('date_paid', [request('from'), request('to')]))
+            ->where('user_id', $userId)
+            ->when($request->query('from') && $request->query('to'), 
+                fn ($q) => $q->whereBetween('date_paid', [$request->query('from'), $request->query('to')]))
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -30,17 +68,26 @@ class RemittanceController extends Controller
 
     public function store(StoreRemittanceRequest $request): JsonResponse
     {
-        $data = $request->validated();
-        $data['user_id'] = session('user_id');
+        $userId = $this->getUserId($request);
+        
+        if (! $userId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authentication required. Please login again.'
+            ], 401);
+        }
+
+        $validated = $request->validated();
+        $validated['user_id'] = $userId;
 
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $filename = time().'_remittance_'.$image->getClientOriginalName();
             $path = $image->storeAs('remittances', $filename, 'public');
-            $data['image_path'] = $path;
+            $validated['image_path'] = $path;
         }
 
-        $remittance = Remittance::create($data);
+        $remittance = Remittance::create($validated);
 
         $obligation = $remittance->receipt->obligation;
         $totalRemitted = $obligation->receipts()->with('remittances')->get()->sum(fn ($r) => $r->remittances()->sum('amount_paid'));
@@ -50,22 +97,16 @@ class RemittanceController extends Controller
         }
 
         $emails = [];
-
-        if ($remittance->user_id && $remittance->user_id > 0) {
-            $user = User::find($remittance->user_id);
-            if ($user && $user->email) {
-                $emails[] = $user->email;
-            }
+        $user = User::find($userId);
+        if ($user && $user->email) {
+            $emails[] = $user->email;
         }
-
         if ($obligation->email && ! in_array($obligation->email, $emails)) {
             $emails[] = $obligation->email;
         }
-
         if ($remittance->email && ! in_array($remittance->email, $emails)) {
             $emails[] = $remittance->email;
         }
-
         foreach ($emails as $email) {
             $obligation->notify(new RemittanceAddedNotification($obligation, $remittance));
         }
@@ -77,26 +118,43 @@ class RemittanceController extends Controller
         ], 201);
     }
 
-    public function show(Remittance $remittance): JsonResponse
+    public function show(Request $request, Remittance $remittance): JsonResponse
     {
+        $userId = $this->getUserId($request);
+        if ($userId && $remittance->user_id !== $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
         return response()->json([
             'success' => true,
             'data' => $remittance->load('receipt.obligation'),
         ]);
     }
 
-    public function update(StoreRemittanceRequest $request, Remittance $remittance): JsonResponse
+    public function update(Request $request, Remittance $remittance): JsonResponse
     {
-        $data = $request->validated();
+        $userId = $this->getUserId($request);
+        if ($userId && $remittance->user_id !== $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'receipt_id' => 'sometimes|exists:receipts,id',
+            'amount_paid' => 'sometimes|numeric|min:0',
+            'date_paid' => 'sometimes|date',
+            'payment_method' => 'sometimes|in:cash,bank_transfer,mobile_money,cheque,other',
+            'reference' => 'nullable|string',
+            'notes' => 'nullable|string',
+            'email' => 'nullable|email',
+        ]);
 
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $filename = time().'_remittance_'.$image->getClientOriginalName();
             $path = $image->storeAs('remittances', $filename, 'public');
-            $data['image_path'] = $path;
+            $validated['image_path'] = $path;
         }
 
-        $remittance->update($data);
+        $remittance->update($validated);
 
         return response()->json([
             'success' => true,
@@ -105,16 +163,17 @@ class RemittanceController extends Controller
         ]);
     }
 
-    public function destroy(Remittance $remittance): JsonResponse
+    public function destroy(Request $request, Remittance $remittance): JsonResponse
     {
+        $userId = $this->getUserId($request);
+        if ($userId && $remittance->user_id !== $userId) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $obligation = $remittance->receipt->obligation;
         $remittance->delete();
 
-        $totalRemitted = Obligation::query()
-            ->whereHas('receipts.remittances', fn ($q) => $q->where('id', '!=', $remittance->id))
-            ->with('receipts.remittances')
-            ->get()
-            ->sum(fn ($o) => $o->receipts->sum(fn ($r) => $r->remittances->sum('amount_paid')));
+        $totalRemitted = $obligation->receipts()->with('remittances')->get()->sum(fn ($r) => $r->remittances()->sum('amount_paid'));
 
         if ($totalRemitted < $obligation->amount_expected) {
             $obligation->update(['status' => 'received']);

@@ -12,17 +12,24 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::get('debug-session', function () {
+        $cookie = request()->cookie('smartcash_uid');
         return response()->json([
-            'user_id' => session('user_id'),
-            'user' => session('user'),
-            'session_id' => session()->getId(),
+            'cookie_value' => $cookie,
+            'cookie_type' => gettype($cookie),
+            'is_numeric' => is_numeric($cookie),
+            'session_user' => session('user'),
+            'session_user_id' => session('user_id'),
+            'header_user_id' => request()->header('X-User-Id'),
         ]);
     });
 
-    Route::apiResource('obligations', ObligationController::class);
-    Route::apiResource('receipts', ReceiptController::class);
-    Route::apiResource('reminders', ReminderController::class);
-    Route::apiResource('remittances', RemittanceController::class);
+    Route::middleware(['web'])->group(function () {
+        Route::apiResource('obligations', ObligationController::class);
+        Route::apiResource('receipts', ReceiptController::class);
+        Route::apiResource('reminders', ReminderController::class);
+        Route::apiResource('remittances', RemittanceController::class);
+    });
+
     Route::apiResource('users', AdminUserController::class)->except(['index', 'store']);
     Route::get('users', [AdminUserController::class, 'index']);
     Route::post('users', [AdminUserController::class, 'store']);
