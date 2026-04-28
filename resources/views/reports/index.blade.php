@@ -86,28 +86,44 @@ async function loadMonthly() {
         
         if (result.success) {
             const data = result.data;
-            container.innerHTML = `
-                <div class="flex justify-between py-1">
-                    <span class="text-gray-500 text-sm">Total Expected</span>
-                    <span class="font-medium text-sm">${formatCurrency(data.total_expected)}</span>
-                </div>
-                <div class="flex justify-between py-1">
-                    <span class="text-gray-500 text-sm">Total Received</span>
-                    <span class="font-medium text-green-600 text-sm">${formatCurrency(data.total_received)}</span>
-                </div>
-                <div class="flex justify-between py-1">
-                    <span class="text-gray-500 text-sm">Total Paid</span>
-                    <span class="font-medium text-blue-600 text-sm">${formatCurrency(data.total_paid)}</span>
-                </div>
-                <div class="flex justify-between py-1">
-                    <span class="text-gray-500 text-sm">Outstanding</span>
-                    <span class="font-medium text-orange-600 text-sm">${formatCurrency(data.outstanding)}</span>
-                </div>
-                <div class="flex justify-between py-1">
-                    <span class="text-gray-500 text-sm">Late Payments</span>
-                    <span class="font-medium text-red-600 text-sm">${data.late_payments}</span>
-                </div>
-            `;
+            let currencyBreakdown = '';
+            
+            if (data.by_currency && data.by_currency.length > 0) {
+                data.by_currency.forEach(curr => {
+                    const expected = formatCurrency(curr.expected, curr.currency);
+                    const received = formatCurrency(curr.received, curr.currency);
+                    const outstanding = formatCurrency(curr.expected - curr.received, curr.currency);
+                    const paid = formatCurrency(curr.paid || 0, curr.currency);
+                    
+                    currencyBreakdown += `
+                        <div class="border-t pt-2 mt-2">
+                            <p class="text-xs font-semibold text-gray-700 mb-2">${curr.currency}</p>
+                            <div class="flex justify-between py-1">
+                                <span class="text-gray-500 text-sm">Expected</span>
+                                <span class="font-medium text-sm">${expected}</span>
+                            </div>
+                            <div class="flex justify-between py-1">
+                                <span class="text-gray-500 text-sm">Received</span>
+                                <span class="font-medium text-green-600 text-sm">${received}</span>
+                            </div>
+                            <div class="flex justify-between py-1">
+                                <span class="text-gray-500 text-sm">Outstanding</span>
+                                <span class="font-medium text-orange-600 text-sm">${outstanding}</span>
+                            </div>
+                            <div class="flex justify-between py-1">
+                                <span class="text-gray-500 text-sm">Total Paid</span>
+                                <span class="font-medium text-blue-600 text-sm">${paid}</span>
+                            </div>
+                            <div class="flex justify-between py-1">
+                                <span class="text-gray-500 text-sm">Late Payments</span>
+                                <span class="font-medium text-red-600 text-sm">${curr.late_payments || 0}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            container.innerHTML = currencyBreakdown;
         } else {
             container.innerHTML = '<p class="text-gray-500 text-sm">No data for this period</p>';
         }
@@ -133,7 +149,7 @@ async function loadOutstanding() {
                         <p class="text-xs text-gray-500">Due: ${obs.formatted_due_date}</p>
                     </div>
                     <div class="text-right ml-2">
-                        <p class="font-medium text-orange-600">${formatCurrency(obs.outstanding)}</p>
+                        <p class="font-medium text-orange-600">${formatCurrency(obs.outstanding, obs.currency)}</p>
                         <p class="text-xs ${obs.status === 'overdue' ? 'text-red-600' : 'text-gray-500'}">${obs.status}</p>
                     </div>
                 </div>
@@ -163,7 +179,7 @@ async function loadOverdue() {
                         <p class="text-xs text-gray-500">Due: ${obs.formatted_due_date}</p>
                     </div>
                     <div class="text-right ml-2">
-                        <p class="font-medium text-red-600">${formatCurrency(obs.outstanding)}</p>
+                        <p class="font-medium text-red-600">${formatCurrency(obs.outstanding, obs.currency)}</p>
                         <p class="text-xs text-red-600">${obs.days_overdue} days overdue</p>
                     </div>
                 </div>
@@ -201,20 +217,20 @@ async function loadStatement() {
                     const receivedTotal = obs.received.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
                     const remittedTotal = obs.remitted.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
                     
-                    return `
-                        <tr class="border-b border-gray-100 hover:bg-gray-50">
-                            <td class="py-3 px-3">
-                                <p class="font-medium text-sm">${obs.obligation.title}</p>
-                                <p class="text-xs text-gray-500">${obs.obligation.formatted_due_date || obs.obligation.due_date}</p>
-                            </td>
-                            <td class="py-3 px-3 text-sm">${formatCurrency(obs.obligation.amount_expected)}</td>
-                            <td class="py-3 px-3 text-sm text-green-600">${formatCurrency(obs.amount_received || receivedTotal)}</td>
-                            <td class="py-3 px-3 text-sm text-blue-600">${formatCurrency(obs.amount_remitted || remittedTotal)}</td>
-                            <td class="py-3 px-3">
-                                <span class="px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(obs.status)}">${obs.status}</span>
-                            </td>
-                        </tr>
-                    `;
+                return `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="py-3 px-3">
+                            <p class="font-medium text-sm">${obs.obligation.title}</p>
+                            <p class="text-xs text-gray-500">${obs.obligation.formatted_due_date || obs.obligation.due_date}</p>
+                        </td>
+                        <td class="py-3 px-3 text-sm">${formatCurrency(obs.obligation.amount_expected, obs.obligation.currency)}</td>
+                        <td class="py-3 px-3 text-sm text-green-600">${formatCurrency(obs.amount_received || receivedTotal, obs.obligation.currency)}</td>
+                        <td class="py-3 px-3 text-sm text-blue-600">${formatCurrency(obs.amount_remitted || remittedTotal, obs.obligation.currency)}</td>
+                        <td class="py-3 px-3">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(obs.status)}">${obs.status}</span>
+                        </td>
+                    </tr>
+                `;
                 }).join('');
             } else if (type === 'obligation') {
                 tbody.innerHTML = '<tr><td colspan="5" class="py-4 px-3 text-center text-gray-500">No obligations found</td></tr>';

@@ -78,9 +78,24 @@ class ReportController extends Controller
             ->whereBetween('due_date', [$startDate, $endDate])
             ->get();
 
-        $totalExpected = (float) $obligations->sum('amount_expected');
+$totalExpected = (float) $obligations->sum('amount_expected');
         $totalReceived = (float) $obligations->sum('amount_received');
         $totalPaid = $obligations->flatMap(fn ($o) => $o->receipts)->flatMap(fn ($r) => $r->remittances)->sum('amount_paid');
+
+        // Group by currency
+        $byCurrency = $obligations->groupBy('currency')->map(function ($group, $curr) {
+            $receipts = $group->flatMap(fn ($o) => $o->receipts);
+            $paid = $receipts->flatMap(fn ($r) => $r->remittances)->sum('amount_paid');
+            $late = $group->where('status', 'overdue')->count();
+            
+            return [
+                'currency' => $curr ?? 'GHS',
+                'expected' => (float) $group->sum('amount_expected'),
+                'received' => (float) $group->sum('amount_received'),
+                'paid' => (float) $paid,
+                'late_payments' => $late,
+            ];
+        })->values();
 
         $outstanding = $totalExpected - $totalReceived;
         $latePayments = $obligations->where('status', 'overdue')->count();
@@ -88,13 +103,12 @@ class ReportController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'month' => $month,
-                'year' => $year,
                 'total_expected' => $totalExpected,
                 'total_received' => $totalReceived,
                 'total_paid' => $totalPaid,
                 'outstanding' => $outstanding,
                 'late_payments' => $latePayments,
+                'by_currency' => $byCurrency,
             ],
         ]);
     }
@@ -155,6 +169,7 @@ class ReportController extends Controller
         $statement = $obligations->map(function ($obligation) {
             $receipts = $obligation->receipts;
             $remittances = $receipts->flatMap(fn ($r) => $r->remittances);
+            $currency = $obligation->currency ?? 'GHS';
 
             return [
                 'obligation' => [
@@ -163,6 +178,7 @@ class ReportController extends Controller
                     'due_date' => $obligation->due_date,
                     'formatted_due_date' => $obligation->formatted_due_date,
                     'amount_expected' => $obligation->amount_expected,
+                    'currency' => $currency,
                 ],
                 'amount_received' => $obligation->amount_received,
                 'amount_remitted' => $remittances->sum('amount_paid'),
@@ -238,6 +254,7 @@ class ReportController extends Controller
                 'due_date' => $o->due_date,
                 'formatted_due_date' => $o->formatted_due_date,
                 'status' => $o->status,
+                'currency' => $o->currency ?? 'GHS',
             ]);
 
         return response()->json([
@@ -271,7 +288,8 @@ class ReportController extends Controller
                 'outstanding' => $o->outstanding,
                 'due_date' => $o->due_date,
                 'formatted_due_date' => $o->formatted_due_date,
-                'days_overdue' => $o->due_date->diffInDays(now()),
+                'days_overdue' => (int) $o->due_date->diffInDays(now()),
+                'currency' => $o->currency ?? 'GHS',
             ]);
 
         return response()->json([
@@ -340,10 +358,7 @@ class ReportController extends Controller
     public function exportExcel(Request $request): StreamedResponse
     {
         $userId = $this->getUserId($request);
-        
-        $currency = $request->input('currency', 'GHS');
         $symbols = ['GHS' => '₵', 'USD' => '$', 'EUR' => '€', 'GBP' => '£', 'NGN' => '₦'];
-        $symbol = $symbols[$currency] ?? '₵';
 
         if (! $userId) {
             $items = collect();
@@ -376,6 +391,7 @@ class ReportController extends Controller
                         'outstanding' => $received - $remitted,
                         'notes' => $ob->notes ?? '',
                         'status' => $ob->status,
+                        'currency' => $ob->currency ?? 'GHS',
                     ]);
                 }
             }
@@ -395,6 +411,7 @@ class ReportController extends Controller
                             'outstanding' => $receipt->amount_received - $remitted,
                             'notes' => $receipt->notes ?? '',
                             'status' => $receipt->payment_method,
+                            'currency' => $ob->currency ?? 'GHS',
                         ]);
                     }
                 }
@@ -415,6 +432,7 @@ class ReportController extends Controller
                                 'outstanding' => 0,
                                 'notes' => $remit->notes ?? '',
                                 'status' => $remit->payment_method,
+                                'currency' => $ob->currency ?? 'GHS',
                             ]);
                         }
                     }
@@ -424,31 +442,38 @@ class ReportController extends Controller
             $items = $items->sortBy('date');
         }
 
-        $callback = function () use ($items, $symbol, $currency) {
+        $callback = function () use ($items, $symbols) {
             $handle = fopen('php://output', 'w');
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
 
-            fputcsv($handle, [
-                    'SmartCash - Revenue Report ('.$currency.')',
-                    'Date', 'Title', 'Type', 'Notes', 
-                    'Amount ('.$currency.')', 'Received ('.$currency.')', 'Remitted ('.$currency.')', 
-                    'Balance ('.$currency.')', 'Outstanding ('.$currency.')', 'Status'
-                ]);
-            fputcsv($handle, []);
-
-            foreach ($items as $item) {
+            $itemsByCurrency = $items->groupBy('currency');
+            
+            foreach ($itemsByCurrency as $currency => $currencyItems) {
+                $symbol = $symbols[$currency] ?? '₵';
+                
+                fputcsv($handle, ["SmartCash - Revenue Report ($currency)"]);
                 fputcsv($handle, [
-                    $item['date'],
-                    $item['title'],
-                    $item['type'],
-                    $item['notes'],
-                    number_format($item['amount'], 2, '.', ','),
-                    number_format($item['received'], 2, '.', ','),
-                    number_format($item['remitted'], 2, '.', ','),
-                    number_format($item['balance'], 2, '.', ','),
-                    number_format($item['outstanding'], 2, '.', ','),
-                    $item['status'],
+                    'Date', 'Title', 'Type', 'Notes', 
+                    "Amount ($currency)", "Received ($currency)", "Remitted ($currency)", 
+                    "Balance ($currency)", "Outstanding ($currency)", 'Status'
                 ]);
+                
+                foreach ($currencyItems as $item) {
+                    fputcsv($handle, [
+                        $item['date'],
+                        $item['title'],
+                        $item['type'],
+                        $item['notes'],
+                        $symbol . number_format($item['amount'], 2, '.', ','),
+                        $symbol . number_format($item['received'], 2, '.', ','),
+                        $symbol . number_format($item['remitted'], 2, '.', ','),
+                        $symbol . number_format($item['balance'], 2, '.', ','),
+                        $symbol . number_format($item['outstanding'], 2, '.', ','),
+                        $item['status'],
+                    ]);
+                }
+                
+                fputcsv($handle, []); // Empty row between currencies
             }
 
             fclose($handle);
@@ -463,10 +488,7 @@ class ReportController extends Controller
     public function exportPdf(Request $request)
     {
         $userId = $this->getUserId($request);
-        
-        $currency = $request->input('currency', 'GHS');
         $symbols = ['GHS' => '₵', 'USD' => '$', 'EUR' => '€', 'GBP' => '£', 'NGN' => '₦'];
-        $symbol = $symbols[$currency] ?? '₵';
 
         $from = $request->input('from', now()->startOfYear()->toDateString());
         $to = $request->input('to', now()->toDateString());
@@ -499,6 +521,7 @@ class ReportController extends Controller
                         'outstanding' => $received - $remitted,
                         'notes' => $ob->notes ?? '',
                         'status' => $ob->status,
+                        'currency' => $ob->currency ?? 'GHS',
                     ]);
                 }
             }
@@ -518,6 +541,7 @@ class ReportController extends Controller
                             'outstanding' => $receipt->amount_received - $remitted,
                             'notes' => $receipt->notes ?? '',
                             'status' => $receipt->payment_method,
+                            'currency' => $ob->currency ?? 'GHS',
                         ]);
                     }
                 }
@@ -538,6 +562,7 @@ class ReportController extends Controller
                                 'outstanding' => 0,
                                 'notes' => $remit->notes ?? '',
                                 'status' => $remit->payment_method,
+                                'currency' => $ob->currency ?? 'GHS',
                             ]);
                         }
                     }
@@ -547,35 +572,49 @@ class ReportController extends Controller
             $items = $items->sortBy('date');
         }
 
+        $itemsByCurrency = $items->groupBy('currency');
+        
         $html = '<html><head><style>
             body { font-family: Arial, sans-serif; padding: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 40px; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
             th { background: #f5f5f5; }
+            h2 { color: #333; margin-top: 30px; }
         </style></head><body>
-        <h1>SmartCash Report ('.$currency.')</h1>
-        <p>Period: '.$from.' to '.$to.'</p>
-        <table>
-            <tr>
-                <th>Date</th><th>Title</th><th>Type</th><th>Notes</th><th>Amount ('.$currency.')</th><th>Received ('.$currency.')</th><th>Remitted ('.$currency.')</th><th>Balance ('.$currency.')</th><th>Outstanding ('.$currency.')</th><th>Status</th>
-            </tr>';
+        <h1>SmartCash Report</h1>
+        <p>Period: '.$from.' to '.$to.'</p>';
 
-        foreach ($items as $item) {
-            $html .= '<tr>
-                <td>'.$item['date'].'</td>
-                <td>'.$item['title'].'</td>
-                <td>'.$item['type'].'</td>
-                <td>'.$item['notes'].'</td>
-                <td>'.number_format($item['amount'], 2, '.', ',').'</td>
-                <td>'.number_format($item['received'], 2, '.', ',').'</td>
-                <td>'.number_format($item['remitted'], 2, '.', ',').'</td>
-                <td>'.number_format($item['balance'], 2, '.', ',').'</td>
-                <td>'.number_format($item['outstanding'], 2, '.', ',').'</td>
-                <td>'.$item['status'].'</td>
-            </tr>';
+        foreach ($itemsByCurrency as $currency => $currencyItems) {
+            $symbol = $symbols[$currency] ?? '₵';
+            
+            $html .= '<h2>'.$currency.'</h2>';
+            $html .= '<table>
+                <tr>
+                    <th>Date</th><th>Title</th><th>Type</th><th>Notes</th>
+                    <th>Amount ('.$currency.')</th><th>Received ('.$currency.')</th>
+                    <th>Remitted ('.$currency.')</th><th>Balance ('.$currency.')</th>
+                    <th>Outstanding ('.$currency.')</th><th>Status</th>
+                </tr>';
+
+            foreach ($currencyItems as $item) {
+                $html .= '<tr>
+                    <td>'.$item['date'].'</td>
+                    <td>'.$item['title'].'</td>
+                    <td>'.$item['type'].'</td>
+                    <td>'.$item['notes'].'</td>
+                    <td>'.$symbol.number_format($item['amount'], 2, '.', ',').'</td>
+                    <td>'.$symbol.number_format($item['received'], 2, '.', ',').'</td>
+                    <td>'.$symbol.number_format($item['remitted'], 2, '.', ',').'</td>
+                    <td>'.$symbol.number_format($item['balance'], 2, '.', ',').'</td>
+                    <td>'.$symbol.number_format($item['outstanding'], 2, '.', ',').'</td>
+                    <td>'.$item['status'].'</td>
+                </tr>';
+            }
+
+            $html .= '</table>';
         }
 
-        $html .= '</table></body></html>';
+        $html .= '</body></html>';
 
         return response($html, 200, ['Content-Type' => 'text/html']);
     }

@@ -16,6 +16,7 @@ class Obligation extends Model
         'title',
         'amount_expected',
         'amount_received',
+        'currency',
         'due_date',
         'frequency',
         'status',

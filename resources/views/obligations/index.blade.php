@@ -55,7 +55,16 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Amount Expected</label>
-                    <input type="number" name="amount_expected" step="0.01" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <div class="flex gap-2">
+                        <input type="number" name="amount_expected" step="0.01" required class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <select name="currency" required class="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="GHS">GHS</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                            <option value="NGN">NGN</option>
+                        </select>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
@@ -99,7 +108,7 @@ function closeModal() {
     document.getElementById('obligation-form').reset();
 }
 
-function editObligation(id, title, amount, dueDate, frequency, notes, email = '') {
+function editObligation(id, title, amount, dueDate, frequency, notes, email = '', currency = 'GHS') {
     document.getElementById('obligation-id').value = id;
     document.querySelector('input[name="title"]').value = title;
     document.querySelector('input[name="amount_expected"]').value = amount;
@@ -107,6 +116,7 @@ function editObligation(id, title, amount, dueDate, frequency, notes, email = ''
     document.querySelector('select[name="frequency"]').value = frequency;
     document.querySelector('textarea[name="notes"]').value = notes || '';
     document.querySelector('input[name="email"]').value = email || '';
+    document.querySelector('select[name="currency"]').value = currency || 'GHS';
     
     document.querySelector('#modal h3').textContent = 'Edit Obligation';
     openModal();
@@ -125,8 +135,8 @@ async function loadObligations() {
             tbody.innerHTML = result.data.map(obs => `
                 <tr class="border-b border-gray-100 hover:bg-gray-50">
                     <td class="py-3 px-4">${obs.title}</td>
-                    <td class="py-3 px-4">${formatCurrency(obs.amount_expected)}</td>
-                    <td class="py-3 px-4">${formatCurrency(obs.amount_received)}</td>
+                    <td class="py-3 px-4 font-medium">${formatCurrency(obs.amount_expected)} ${obs.currency || 'GHS'}</td>
+                    <td class="py-3 px-4">${formatCurrency(obs.amount_received)} ${obs.currency || 'GHS'}</td>
                     <td class="py-3 px-4">${obs.formatted_due_date}</td>
                     <td class="py-3 px-4 capitalize">${obs.frequency}</td>
                     <td class="py-3 px-4 text-xs text-gray-500">${obs.email || '-'}</td>
@@ -135,8 +145,8 @@ async function loadObligations() {
                         <span class="px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(obs.status)}">${obs.status}</span>
                     </td>
                     <td class="py-3 px-4">
-                        <button onclick="confirmEditObligation(${obs.id}, '${obs.title}', ${obs.amount_expected}, '${obs.input_due_date}', '${obs.frequency}', '${obs.notes || ''}', '${obs.email || ''}')" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
-                        <button onclick="confirmDeleteObligation(${obs.id}, '${obs.title}')" class="text-red-600 hover:text-red-800">Delete</button></button>
+                        <button onclick="confirmEditObligation(${obs.id}, '${obs.title}', ${obs.amount_expected}, '${obs.input_due_date}', '${obs.frequency}', '${obs.notes || ''}', '${obs.email || ''}', '${obs.currency}')" class="text-blue-600 hover:text-blue-800 mr-2">Edit</button>
+                        <button onclick="confirmDeleteObligation(${obs.id}, '${obs.title}')" class="text-red-600 hover:text-red-800">Delete</button>
                     </td>
                 </tr>
             `).join('');

@@ -16,6 +16,7 @@ class StoreObligationRequest extends FormRequest
         return [
             'title' => 'required|string|max:255',
             'amount_expected' => 'required|numeric|min:0',
+            'currency' => 'nullable|in:GHS,USD,EUR,GBP,NGN',
             'frequency' => 'required|in:monthly,quarterly,one-time',
             'due_date' => 'required|date',
             'notes' => 'nullable|string',

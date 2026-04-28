@@ -151,8 +151,8 @@
             window.location.reload();
         }
 
-        function formatCurrency(amount) {
-            const currency = getCurrency();
+        function formatCurrency(amount, currencyCode = null) {
+            const currency = currencyCode || getCurrency();
             const config = currencies[currency] || currencies['GHS'];
             return new Intl.NumberFormat(config.locale, { 
                 style: 'currency', 

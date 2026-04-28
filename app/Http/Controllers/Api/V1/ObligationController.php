@@ -24,7 +24,7 @@ class ObligationController extends Controller
                 return $id;
             }
         }
-        
+
         // Try cookie
         $userId = $request->cookie('smartcash_uid');
         if ($userId) {
@@ -33,7 +33,7 @@ class ObligationController extends Controller
                 return $id;
             }
         }
-        
+
         // Fallback to session
         $sessionUserId = session('user_id');
         if ($sessionUserId) {
@@ -42,14 +42,14 @@ class ObligationController extends Controller
                 return $id;
             }
         }
-        
+
         return null;
     }
 
     public function index(Request $request): JsonResponse
     {
         $userId = $this->getUserId($request);
-        
+
         if (! $userId) {
             return response()->json([
                 'success' => true,
@@ -73,16 +73,17 @@ class ObligationController extends Controller
     public function store(StoreObligationRequest $request): JsonResponse
     {
         $userId = $this->getUserId($request);
-        
+
         if (! $userId) {
             return response()->json([
                 'success' => false,
-                'message' => 'Authentication required. Please login again.'
+                'message' => 'Authentication required. Please login again.',
             ], 401);
         }
 
         $validated = $request->validated();
         $validated['user_id'] = $userId;
+        $validated['currency'] = $validated['currency'] ?? 'GHS';
 
         $obligation = Obligation::create($validated);
 
@@ -113,6 +114,7 @@ class ObligationController extends Controller
         if ($userId && $obligation->user_id !== $userId) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
+
         return response()->json([
             'success' => true,
             'data' => $obligation->load('receipts'),
