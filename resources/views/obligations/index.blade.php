@@ -59,7 +59,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
-                    <input type="date" name="due_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <input type="date" name="due_date" required onchange="validateDate(this, 'Due date')" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
@@ -239,6 +239,18 @@ function confirmEditObligation(id, title, amount, dueDate, frequency, notes, ema
 function confirmDeleteObligation(id, title) {
     if (!confirm('Are you sure you want to DELETE "' + title + '"? This cannot be undone.')) return;
     deleteObligation(id);
+}
+
+function validateDate(input, fieldName) {
+    const selected = new Date(input.value);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    if (selected < new Date(today.toDateString())) {
+        alert(fieldName + ' cannot be before today!');
+        input.value = '';
+        input.focus();
+    }
 }
 
 loadObligations();

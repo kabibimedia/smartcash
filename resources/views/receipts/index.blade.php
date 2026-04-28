@@ -59,7 +59,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Date Received</label>
-                    <input type="date" name="date_received" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                    <input type="date" name="date_received" required onchange="validateDate(this, 'Date received')" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
@@ -291,6 +291,23 @@ function confirmEditReceipt(id, obligationId, amount, dateReceived, method, refe
 
 function confirmDeleteReceipt(id) {
     deleteReceipt(id);
+}
+
+function validateDate(input, fieldName) {
+    const selected = new Date(input.value);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    today.setDate(today.getDate());
+    
+    if (selected > today) {
+        alert(fieldName + ' cannot be in the future!');
+        input.value = '';
+        input.focus();
+    } else if (selected < new Date(today.toDateString())) {
+        alert(fieldName + ' cannot be before today!');
+        input.value = '';
+        input.focus();
+    }
 }
 
 loadReceipts();
