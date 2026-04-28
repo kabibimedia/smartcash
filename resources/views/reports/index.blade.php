@@ -285,13 +285,17 @@ loadOverdue();
 function exportExcel() {
     const from = document.getElementById('from-date').value;
     const to = document.getElementById('to-date').value;
-    window.open(`/api/v1/reports/export/excel?from=${from}&to=${to}&user_id=${smartcashUserId}`, '_blank');
+    const type = document.getElementById('statement-type').value;
+    const currency = localStorage.getItem('smartcash_currency') || 'GHS';
+    window.open(`/api/v1/reports/export/excel?from=${from}&to=${to}&type=${type}&currency=${currency}&user_id=${smartcashUserId}`, '_blank');
 }
 
 function exportPdf() {
     const from = document.getElementById('from-date').value;
     const to = document.getElementById('to-date').value;
-    window.open(`/api/v1/reports/export/pdf?from=${from}&to=${to}&user_id=${smartcashUserId}`, '_blank');
+    const type = document.getElementById('statement-type').value;
+    const currency = localStorage.getItem('smartcash_currency') || 'GHS';
+    window.open(`/api/v1/reports/export/pdf?from=${from}&to=${to}&type=${type}&currency=${currency}&user_id=${smartcashUserId}`, '_blank');
 }
 </script>
 @endsection

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Obligation;
+use App\Models\Receipt;
 use App\Models\Remittance;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -21,7 +22,7 @@ class ReportController extends Controller
                 return $id;
             }
         }
-        
+
         $queryUserId = $request->query('user_id');
         if ($queryUserId) {
             $id = (int) $queryUserId;
@@ -29,7 +30,7 @@ class ReportController extends Controller
                 return $id;
             }
         }
-        
+
         $userId = $request->cookie('smartcash_uid');
         if ($userId) {
             $id = (int) $userId;
@@ -37,7 +38,7 @@ class ReportController extends Controller
                 return $id;
             }
         }
-        
+
         $sessionUserId = session('user_id');
         if ($sessionUserId) {
             $id = (int) $sessionUserId;
@@ -45,14 +46,14 @@ class ReportController extends Controller
                 return $id;
             }
         }
-        
+
         return null;
     }
 
     public function monthly(Request $request): JsonResponse
     {
         $userId = $this->getUserId($request);
-        
+
         if (! $userId) {
             return response()->json([
                 'success' => true,
@@ -65,7 +66,7 @@ class ReportController extends Controller
                 ],
             ]);
         }
-        
+
         $month = $request->input('month', now()->month);
         $year = $request->input('year', now()->year);
 
@@ -101,7 +102,7 @@ class ReportController extends Controller
     public function statement(Request $request): JsonResponse
     {
         $userId = $this->getUserId($request);
-        
+
         if (! $userId) {
             return response()->json([
                 'success' => true,
@@ -117,14 +118,18 @@ class ReportController extends Controller
                 ],
             ]);
         }
-        
+
         $from = $request->input('from', now()->startOfYear()->toDateString());
         $to = $request->input('to', now()->toDateString());
         $type = $request->input('type', 'all');
-        
+
         $today = now()->toDateString();
-        if ($from > $today) $from = $today;
-        if ($to > $today) $to = $today;
+        if ($from > $today) {
+            $from = $today;
+        }
+        if ($to > $today) {
+            $to = $today;
+        }
 
         $obligations = Obligation::query()
             ->where('user_id', $userId)
@@ -133,14 +138,14 @@ class ReportController extends Controller
             ->with(['receipts', 'receipts.remittances'])
             ->get();
 
-        $receipts = \App\Models\Receipt::query()
+        $receipts = Receipt::query()
             ->whereHas('obligation', fn ($q) => $q->where('user_id', $userId))
             ->whereDate('date_received', '>=', $from)
             ->whereDate('date_received', '<=', $to)
             ->with(['obligation', 'remittances'])
             ->get();
 
-        $remittances = \App\Models\Remittance::query()
+        $remittances = Remittance::query()
             ->whereHas('receipt.obligation', fn ($q) => $q->where('user_id', $userId))
             ->whereDate('date_paid', '>=', $from)
             ->whereDate('date_paid', '<=', $to)
@@ -278,7 +283,7 @@ class ReportController extends Controller
     public function dashboard(): JsonResponse
     {
         $userId = $this->getUserId(request());
-        
+
         if (! $userId) {
             return response()->json([
                 'success' => true,
@@ -336,36 +341,113 @@ class ReportController extends Controller
     {
         $userId = $this->getUserId($request);
         
+        $currency = $request->input('currency', 'GHS');
+        $symbols = ['GHS' => '₵', 'USD' => '$', 'EUR' => '€', 'GBP' => '£', 'NGN' => '₦'];
+        $symbol = $symbols[$currency] ?? '₵';
+
         if (! $userId) {
-            $obligations = collect();
+            $items = collect();
         } else {
             $from = $request->input('from', now()->startOfYear()->toDateString());
             $to = $request->input('to', now()->toDateString());
+            $type = $request->input('type', 'all');
+
             $obligations = Obligation::query()
                 ->where('user_id', $userId)
                 ->whereDate('due_date', '>=', $from)
                 ->whereDate('due_date', '<=', $to)
                 ->with(['receipts', 'receipts.remittances'])
                 ->get();
+
+            $items = collect();
+
+            if ($type === 'all' || $type === 'obligation') {
+                foreach ($obligations as $ob) {
+                    $received = $ob->receipts->sum('amount_received');
+                    $remitted = $ob->receipts->flatMap->remittances->sum('amount_paid');
+                    $items->push([
+                        'type' => 'Obligation',
+                        'title' => $ob->title,
+                        'date' => $ob->due_date,
+                        'amount' => $ob->amount_expected,
+                        'received' => $received,
+                        'remitted' => $remitted,
+                        'balance' => $ob->amount_expected - $received,
+                        'outstanding' => $received - $remitted,
+                        'notes' => $ob->notes ?? '',
+                        'status' => $ob->status,
+                    ]);
+                }
+            }
+
+            if ($type === 'all' || $type === 'receipt') {
+                foreach ($obligations as $ob) {
+                    foreach ($ob->receipts as $receipt) {
+                        $remitted = $receipt->remittances->sum('amount_paid');
+                        $items->push([
+                            'type' => 'Receipt',
+                            'title' => $ob->title,
+                            'date' => $receipt->date_received,
+                            'amount' => $receipt->amount_received,
+                            'received' => $receipt->amount_received,
+                            'remitted' => $remitted,
+                            'balance' => 0,
+                            'outstanding' => $receipt->amount_received - $remitted,
+                            'notes' => $receipt->notes ?? '',
+                            'status' => $receipt->payment_method,
+                        ]);
+                    }
+                }
+            }
+
+            if ($type === 'all' || $type === 'remittance') {
+                foreach ($obligations as $ob) {
+                    foreach ($ob->receipts as $receipt) {
+                        foreach ($receipt->remittances as $remit) {
+                            $items->push([
+                                'type' => 'Payment',
+                                'title' => $ob->title,
+                                'date' => $remit->date_paid,
+                                'amount' => $remit->amount_paid,
+                                'received' => 0,
+                                'remitted' => $remit->amount_paid,
+                                'balance' => 0,
+                                'outstanding' => 0,
+                                'notes' => $remit->notes ?? '',
+                                'status' => $remit->payment_method,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            $items = $items->sortBy('date');
         }
 
-        $callback = function () use ($obligations) {
+        $callback = function () use ($items, $symbol, $currency) {
             $handle = fopen('php://output', 'w');
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
 
-            fputcsv($handle, ['SmartCash - Revenue Report']);
+            fputcsv($handle, [
+                    'SmartCash - Revenue Report ('.$currency.')',
+                    'Date', 'Title', 'Type', 'Notes', 
+                    'Amount ('.$currency.')', 'Received ('.$currency.')', 'Remitted ('.$currency.')', 
+                    'Balance ('.$currency.')', 'Outstanding ('.$currency.')', 'Status'
+                ]);
+            fputcsv($handle, []);
 
-            foreach ($obligations as $obligation) {
-                $totalRemitted = $obligation->receipts->flatMap(fn ($r) => $r->remittances)->sum('amount_paid');
-
+            foreach ($items as $item) {
                 fputcsv($handle, [
-                    $obligation->id,
-                    $obligation->title,
-                    $obligation->due_date,
-                    $obligation->amount_expected,
-                    $obligation->amount_received,
-                    $totalRemitted,
-                    $obligation->status,
+                    $item['date'],
+                    $item['title'],
+                    $item['type'],
+                    $item['notes'],
+                    number_format($item['amount'], 2, '.', ','),
+                    number_format($item['received'], 2, '.', ','),
+                    number_format($item['remitted'], 2, '.', ','),
+                    number_format($item['balance'], 2, '.', ','),
+                    number_format($item['outstanding'], 2, '.', ','),
+                    $item['status'],
                 ]);
             }
 
@@ -382,11 +464,16 @@ class ReportController extends Controller
     {
         $userId = $this->getUserId($request);
         
+        $currency = $request->input('currency', 'GHS');
+        $symbols = ['GHS' => '₵', 'USD' => '$', 'EUR' => '€', 'GBP' => '£', 'NGN' => '₦'];
+        $symbol = $symbols[$currency] ?? '₵';
+
         $from = $request->input('from', now()->startOfYear()->toDateString());
         $to = $request->input('to', now()->toDateString());
-        
+        $type = $request->input('type', 'all');
+
         if (! $userId) {
-            $obligations = collect();
+            $items = collect();
         } else {
             $obligations = Obligation::query()
                 ->where('user_id', $userId)
@@ -394,6 +481,70 @@ class ReportController extends Controller
                 ->whereDate('due_date', '<=', $to)
                 ->with(['receipts', 'receipts.remittances'])
                 ->get();
+
+            $items = collect();
+
+            if ($type === 'all' || $type === 'obligation') {
+                foreach ($obligations as $ob) {
+                    $received = $ob->receipts->sum('amount_received');
+                    $remitted = $ob->receipts->flatMap->remittances->sum('amount_paid');
+                    $items->push([
+                        'type' => 'Obligation',
+                        'title' => $ob->title,
+                        'date' => $ob->due_date,
+                        'amount' => $ob->amount_expected,
+                        'received' => $received,
+                        'remitted' => $remitted,
+                        'balance' => $ob->amount_expected - $received,
+                        'outstanding' => $received - $remitted,
+                        'notes' => $ob->notes ?? '',
+                        'status' => $ob->status,
+                    ]);
+                }
+            }
+
+            if ($type === 'all' || $type === 'receipt') {
+                foreach ($obligations as $ob) {
+                    foreach ($ob->receipts as $receipt) {
+                        $remitted = $receipt->remittances->sum('amount_paid');
+                        $items->push([
+                            'type' => 'Receipt',
+                            'title' => $ob->title,
+                            'date' => $receipt->date_received,
+                            'amount' => $receipt->amount_received,
+                            'received' => $receipt->amount_received,
+                            'remitted' => $remitted,
+                            'balance' => 0,
+                            'outstanding' => $receipt->amount_received - $remitted,
+                            'notes' => $receipt->notes ?? '',
+                            'status' => $receipt->payment_method,
+                        ]);
+                    }
+                }
+            }
+
+            if ($type === 'all' || $type === 'remittance') {
+                foreach ($obligations as $ob) {
+                    foreach ($ob->receipts as $receipt) {
+                        foreach ($receipt->remittances as $remit) {
+                            $items->push([
+                                'type' => 'Payment',
+                                'title' => $ob->title,
+                                'date' => $remit->date_paid,
+                                'amount' => $remit->amount_paid,
+                                'received' => 0,
+                                'remitted' => $remit->amount_paid,
+                                'balance' => 0,
+                                'outstanding' => 0,
+                                'notes' => $remit->notes ?? '',
+                                'status' => $remit->payment_method,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            $items = $items->sortBy('date');
         }
 
         $html = '<html><head><style>
@@ -402,21 +553,25 @@ class ReportController extends Controller
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
             th { background: #f5f5f5; }
         </style></head><body>
-        <h1>SmartCash Report</h1>
+        <h1>SmartCash Report ('.$currency.')</h1>
         <p>Period: '.$from.' to '.$to.'</p>
         <table>
             <tr>
-                <th>Title</th><th>Due Date</th><th>Expected</th><th>Received</th><th>Status</th>
+                <th>Date</th><th>Title</th><th>Type</th><th>Notes</th><th>Amount ('.$currency.')</th><th>Received ('.$currency.')</th><th>Remitted ('.$currency.')</th><th>Balance ('.$currency.')</th><th>Outstanding ('.$currency.')</th><th>Status</th>
             </tr>';
 
-        foreach ($obligations as $obligation) {
-            $totalRemitted = $obligation->receipts->flatMap(fn ($r) => $r->remittances)->sum('amount_paid');
+        foreach ($items as $item) {
             $html .= '<tr>
-                <td>'.$obligation->title.'</td>
-                <td>'.$obligation->due_date.'</td>
-                <td>'.$obligation->amount_expected.'</td>
-                <td>'.$obligation->amount_received.'</td>
-                <td>'.$obligation->status.'</td>
+                <td>'.$item['date'].'</td>
+                <td>'.$item['title'].'</td>
+                <td>'.$item['type'].'</td>
+                <td>'.$item['notes'].'</td>
+                <td>'.number_format($item['amount'], 2, '.', ',').'</td>
+                <td>'.number_format($item['received'], 2, '.', ',').'</td>
+                <td>'.number_format($item['remitted'], 2, '.', ',').'</td>
+                <td>'.number_format($item['balance'], 2, '.', ',').'</td>
+                <td>'.number_format($item['outstanding'], 2, '.', ',').'</td>
+                <td>'.$item['status'].'</td>
             </tr>';
         }
 
