@@ -36,8 +36,8 @@
 </div>
 
 <div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <div class="flex justify-between items-center mb-4">
+    <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2">
             <h3 class="text-lg font-semibold">Record Receipt</h3>
             <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -131,7 +131,7 @@ function editReceipt(id, obligationId, amount, dateReceived, method, reference, 
     document.querySelector('select[name="payment_method"]').value = method;
     document.querySelector('input[name="reference"]').value = reference || '';
     document.querySelector('textarea[name="notes"]').value = notes || '';
-    document.querySelector('input[name="email"]').value = email || '';
+    document.querySelector('input[name="email"]').value = (email && email !== 'null') ? email : '';
     
     const existingImage = document.getElementById('existing-image');
     if (imageUrl && existingImage) {
@@ -204,20 +204,29 @@ async function loadReceipts() {
 async function saveReceipt(event) {
     event.preventDefault();
     const form = event.target;
-    const formData = new FormData(form);
     
     const id = document.getElementById('receipt-id').value;
     const isEdit = id && id !== '';
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
+    // Convert form to object - filter properly
+    const formData = new FormData(form);
+    const data = {};
+    for (let [key, value] of formData.entries()) {
+        if (key === 'id' || key === 'image') continue;
+        if (value instanceof File) continue;
+        if (value && typeof value === 'string' && value.trim() !== '') {
+            data[key] = value;
+        }
+    }
+    // Remove email if empty
+    if (data['email'] === '') delete data['email'];
+    
     try {
         const url = isEdit ? `/api/v1/receipts/${id}` : '/api/v1/receipts';
         const method = isEdit ? 'PUT' : 'POST';
         
-        // Log what we're sending
-        for (let pair of formData.entries()) {
-            console.log('FormData:', pair[0], '=', pair[1]);
-        }
+        console.log('API call:', method, url, data);
         
         const response = await fetch(url, {
             method: method,
@@ -225,12 +234,15 @@ async function saveReceipt(event) {
             headers: { 
                 'X-User-Id': smartcashUserId.toString(),
                 'Accept': 'application/json',
+                'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken
             },
-            body: formData
+            body: JSON.stringify(data)
         });
         
+        console.log('Response status:', response.status);
         const result = await response.json();
+        console.log('Response:', result);
         
         if (result.success) {
             closeModal();
@@ -239,11 +251,11 @@ async function saveReceipt(event) {
             await loadReceipts();
             alert(isEdit ? 'Receipt updated successfully!' : 'Receipt recorded successfully!');
         } else {
-            alert('Error: ' + result.message);
+            alert('Error: ' + (result.message || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error saving receipt:', error);
-        alert('Error saving receipt');
+        alert('Error saving receipt: ' + error.message);
     }
 }
 

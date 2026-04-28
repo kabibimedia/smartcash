@@ -23,39 +23,31 @@
             }
         }
     </script>
-    <style>
-        @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); }
-            .sidebar.open { transform: translateX(0); }
-            .sidebar-overlay { display: none; }
-            .sidebar-overlay.open { display: block; }
-        }
-    </style>
 </head>
 <body class="bg-gray-100 text-gray-900">
-    <div class="min-h-screen flex flex-col md:flex-row">
-        <!-- Mobile Header -->
-        <header class="md:hidden bg-gray-800 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-            <button onclick="toggleSidebar()" class="text-white p-2">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                </svg>
-            </button>
-            <h1 class="text-lg font-bold">SmartCash</h1>
-            <div class="w-10"></div>
-        </header>
+    <!-- Mobile Header -->
+    <header id="mobile-header" class="md:hidden bg-gray-800 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+        <button onclick="toggleSidebar()" class="text-white p-2 -ml-2">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
+        <h1 class="text-lg font-bold">SmartCash</h1>
+        <div class="w-10"></div>
+    </header>
 
-        <!-- Sidebar Overlay (mobile) -->
-        <div onclick="toggleSidebar()" class="sidebar-overlay fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"></div>
+    <div class="flex min-h-screen">
+        <!-- Sidebar Overlay (mobile only) -->
+        <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden"></div>
 
         <!-- Sidebar -->
-        <aside class="sidebar fixed md:relative w-64 bg-gray-800 text-white h-full md:h-auto flex flex-col z-50 transition-transform duration-300">
+        <aside id="sidebar" class="fixed md:relative w-64 bg-gray-800 text-white h-screen md:h-auto flex flex-col z-40 transition-transform duration-200 ease-out -translate-x-full md:translate-x-0">
             <div class="p-4 border-b border-gray-700 flex items-center justify-between md:justify-start">
                 <div>
                     <h1 class="text-xl font-bold">SmartCash</h1>
                     <p class="text-sm text-gray-400">Revenue Remittance</p>
                 </div>
-                <button onclick="toggleSidebar()" class="md:hidden text-gray-400 hover:text-white">
+                <button onclick="toggleSidebar()" class="md:hidden text-gray-400 hover:text-white p-1">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -100,7 +92,7 @@
 
         <!-- Main Content -->
         <main class="flex-1 flex flex-col min-w-0">
-            <header class="bg-white border-b border-gray-200 px-3 sm:px-4 md:px-6 py-3 md:py-4">
+            <header class="bg-white border-b border-gray-200 px-3 sm:px-4 md:px-6 py-3 md:py-4 md:mt-0 mt-0">
                 <div class="flex items-center justify-between">
                     <h2 class="text-base md:text-lg font-semibold truncate">@yield('header', 'Dashboard')</h2>
                     <div class="flex items-center gap-2 sm:gap-4 text-sm">
@@ -117,7 +109,7 @@
                     </div>
                 </div>
             </header>
-            <div class="p-2 sm:p-4 md:p-6 flex-1 overflow-x-hidden">
+            <div class="p-2 sm:p-4 md:p-6 flex-1 overflow-x-auto">
                 @yield('content')
             </div>
         </main>
@@ -125,8 +117,20 @@
 
     <script>
         function toggleSidebar() {
-            document.querySelector('.sidebar').classList.toggle('open');
-            document.querySelector('.sidebar-overlay').classList.toggle('open');
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            if (sidebar.classList.contains('translate-x-0')) {
+                sidebar.classList.remove('translate-x-0');
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            } else {
+                sidebar.classList.remove('-translate-x-full');
+                sidebar.classList.add('translate-x-0');
+                overlay.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+            }
         }
 
         const currencies = {

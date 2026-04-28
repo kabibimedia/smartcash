@@ -9,6 +9,7 @@ use App\Models\Receipt;
 use App\Models\User;
 use App\Notifications\ReceiptAddedNotification;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ReceiptController extends Controller
 {
@@ -83,30 +84,38 @@ class ReceiptController extends Controller
         ]);
     }
 
-    public function update(\Illuminate\Http\Request $request, Receipt $receipt): JsonResponse
+    public function update(Request $request, Receipt $receipt): JsonResponse
     {
-        // Skip validation for now, just get all data
-        $data = $request->all();
-        
-        // Remove empty/unnecessary fields
-        unset($data['_token'], $data['_method'], $data['id']);
-        
-        // Handle empty image
-        if (isset($data['image']) && ($data['image'] instanceof \Illuminate\Http\UploadedFile)) {
-            if ($data['image']->getSize() === 0) {
-                unset($data['image']);
-            }
-        } else {
-            unset($data['image']);
-        }
-        
-        // Convert empty strings to null
-        foreach ($data as $key => $value) {
-            if ($value === '' || $value === null) {
-                $data[$key] = null;
+        // Try JSON first, then fall back to manual parse
+        $data = $request->json()->all();
+
+        if (empty($data)) {
+            $rawInput = file_get_contents('php://input');
+            if (str_contains($rawInput, 'form-data')) {
+                preg_match_all('/name="([^"]+)"[\s\S]*?\n\n([^\n]+?)(?=\r?\n|\r|$)/m', $rawInput, $matches, PREG_SET_ORDER);
+                foreach ($matches as $match) {
+                    $key = $match[1];
+                    $value = trim($match[2]);
+                    // Skip empty, boundaries, meta fields
+                    if ($value !== '' && $key !== 'id' && $key !== 'image' && ! str_starts_with($value, '------') && ! str_contains($value, 'geckoformboundary')) {
+                        $data[$key] = $value;
+                    }
+                }
             }
         }
-        
+
+        if (empty($data)) {
+            return response()->json(['success' => false, 'message' => 'No data']);
+        }
+
+        // Clean email field - remove if invalid
+        if (isset($data['email'])) {
+            $email = $data['email'];
+            if (empty($email) || strlen($email) > 100 || str_contains($email, 'boundary') || str_starts_with($email, '------')) {
+                unset($data['email']);
+            }
+        }
+
         $receipt->update($data);
 
         $obligation = $receipt->obligation;
