@@ -36,8 +36,8 @@
 </div>
 
 <div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <div class="flex justify-between items-center mb-4">
+    <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2">
             <h3 class="text-lg font-semibold">Record Payment to Boss</h3>
             <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -126,7 +126,7 @@ function editRemittance(id, receiptId, amount, date, method, reference, notes, e
     document.querySelector('select[name="payment_method"]').value = method;
     document.querySelector('input[name="reference"]').value = reference || '';
     document.querySelector('textarea[name="notes"]').value = notes || '';
-    document.querySelector('input[name="email"]').value = email || '';
+    document.querySelector('input[name="email"]').value = (email && email !== 'null') ? email : '';
     
     const existingImage = document.getElementById('existing-image');
     if (imageUrl && existingImage) {
@@ -196,11 +196,22 @@ async function loadRemittances() {
 async function saveRemittance(event) {
     event.preventDefault();
     const form = event.target;
-    const formData = new FormData(form);
     
     const id = document.getElementById('remittance-id').value;
     const isEdit = id && id !== '';
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    
+    // Convert to object and filter
+    const formData = new FormData(form);
+    const data = {};
+    for (let [key, value] of formData.entries()) {
+        if (key === 'id' || key === 'image') continue;
+        if (value instanceof File) continue;
+        if (value && typeof value === 'string' && value.trim() !== '') {
+            data[key] = value;
+        }
+    }
+    if (data['email'] === '') delete data['email'];
     
     try {
         const url = isEdit ? `/api/v1/remittances/${id}` : '/api/v1/remittances';
@@ -212,9 +223,10 @@ async function saveRemittance(event) {
             headers: { 
                 'X-User-Id': smartcashUserId.toString(),
                 'Accept': 'application/json',
+                'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken
             },
-            body: formData
+            body: JSON.stringify(data)
         });
         const result = await response.json();
         

@@ -42,8 +42,8 @@
 </div>
 
 <div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <div class="flex justify-between items-center mb-4">
+    <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2">
             <h3 class="text-lg font-semibold">Add Reminder</h3>
             <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreRemittanceRequest;
-use App\Models\Obligation;
 use App\Models\Remittance;
 use App\Models\User;
 use App\Notifications\RemittanceAddedNotification;
@@ -22,7 +21,7 @@ class RemittanceController extends Controller
                 return $id;
             }
         }
-        
+
         $userId = $request->cookie('smartcash_uid');
         if ($userId) {
             $id = (int) $userId;
@@ -30,7 +29,7 @@ class RemittanceController extends Controller
                 return $id;
             }
         }
-        
+
         $sessionUserId = session('user_id');
         if ($sessionUserId) {
             $id = (int) $sessionUserId;
@@ -38,14 +37,14 @@ class RemittanceController extends Controller
                 return $id;
             }
         }
-        
+
         return null;
     }
 
     public function index(Request $request): JsonResponse
     {
         $userId = $this->getUserId($request);
-        
+
         if (! $userId) {
             return response()->json([
                 'success' => true,
@@ -55,7 +54,7 @@ class RemittanceController extends Controller
 
         $remittances = Remittance::query()
             ->where('user_id', $userId)
-            ->when($request->query('from') && $request->query('to'), 
+            ->when($request->query('from') && $request->query('to'),
                 fn ($q) => $q->whereBetween('date_paid', [$request->query('from'), $request->query('to')]))
             ->orderBy('created_at', 'desc')
             ->get();
@@ -69,11 +68,11 @@ class RemittanceController extends Controller
     public function store(StoreRemittanceRequest $request): JsonResponse
     {
         $userId = $this->getUserId($request);
-        
+
         if (! $userId) {
             return response()->json([
                 'success' => false,
-                'message' => 'Authentication required. Please login again.'
+                'message' => 'Authentication required. Please login again.',
             ], 401);
         }
 
@@ -124,6 +123,7 @@ class RemittanceController extends Controller
         if ($userId && $remittance->user_id !== $userId) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
+
         return response()->json([
             'success' => true,
             'data' => $remittance->load('receipt.obligation'),
@@ -137,24 +137,43 @@ class RemittanceController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
 
-        $validated = $request->validate([
-            'receipt_id' => 'sometimes|exists:receipts,id',
-            'amount_paid' => 'sometimes|numeric|min:0',
-            'date_paid' => 'sometimes|date',
-            'payment_method' => 'sometimes|in:cash,bank_transfer,mobile_money,cheque,other',
-            'reference' => 'nullable|string',
-            'notes' => 'nullable|string',
-            'email' => 'nullable|email',
-        ]);
+        // Try JSON first, then manual parse
+        $data = $request->json()->all();
 
-        if ($request->hasFile('image')) {
+        if (empty($data)) {
+            $rawInput = file_get_contents('php://input');
+            if (str_contains($rawInput, 'form-data')) {
+                preg_match_all('/name="([^"]+)"[\s\S]*?\n\n([^\n]+?)(?=\r?\n|\r|$)/m', $rawInput, $matches, PREG_SET_ORDER);
+                foreach ($matches as $match) {
+                    $key = $match[1];
+                    $value = trim($match[2]);
+                    if ($value !== '' && $key !== 'id' && $key !== 'image' && ! str_starts_with($value, '------') && ! str_contains($value, 'boundary')) {
+                        $data[$key] = $value;
+                    }
+                }
+            }
+        }
+
+        if (empty($data)) {
+            return response()->json(['success' => false, 'message' => 'No data']);
+        }
+
+        // Clean email field
+        if (isset($data['email'])) {
+            $email = $data['email'];
+            if (empty($email) || strlen($email) > 100 || str_contains($email, 'boundary') || str_starts_with($email, '------')) {
+                unset($data['email']);
+            }
+        }
+
+        if ($request->hasFile('image') && $request->file('image')->getSize() > 0) {
             $image = $request->file('image');
             $filename = time().'_remittance_'.$image->getClientOriginalName();
             $path = $image->storeAs('remittances', $filename, 'public');
-            $validated['image_path'] = $path;
+            $data['image_path'] = $path;
         }
 
-        $remittance->update($validated);
+        $remittance->update($data);
 
         return response()->json([
             'success' => true,
