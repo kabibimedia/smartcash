@@ -37,7 +37,7 @@
 
 <div id="modal" class="fixed inset-0 bg-black/50 hidden z-50">
     <div class="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:mx-auto sm:mt-8 sm:rounded-xl sm:shadow-xl flex flex-col">
-        <div class="flex justify-between items-center p-4 sm:p-6 border-b sticky top-0 bg-white">
+        <div class="flex justify-between items-center p-4 sm:p-6 border-b">
             <h3 class="text-lg font-semibold">Record Receipt</h3>
             <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
