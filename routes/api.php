@@ -45,5 +45,6 @@ Route::prefix('v1')->group(function () {
     Route::get('reports/dashboard', [ReportController::class, 'dashboard']);
     Route::get('reports/export/excel', [ReportController::class, 'exportExcel']);
     Route::get('reports/export/pdf', [ReportController::class, 'exportPdf']);
+    Route::post('import', [ReportController::class, 'import']);
     Route::get('audits', [AuditController::class, 'index']);
 });

@@ -164,5 +164,6 @@
             document.getElementById('currency-select').value = getCurrency();
         }
     </script>
+    @yield('scripts')
 </body>
 </html>

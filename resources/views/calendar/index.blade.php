@@ -6,18 +6,18 @@
 @section('content')
 <div class="mb-6 flex justify-between items-center">
     <div class="flex gap-2">
-        <button onclick="changeMonth(-1)" class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">
+        <button id="prev-month" class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">
             ← Prev
         </button>
-        <button onclick="changeMonth(0)" class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">
+        <button id="today-btn" class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">
             Today
         </button>
-        <button onclick="changeMonth(1)" class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">
+        <button id="next-month" class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">
             Next →
         </button>
         <span id="current-month" class="px-3 py-2 font-semibold"></span>
     </div>
-    <button onclick="openModal()" class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
+    <button id="add-reminder-btn" class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
         + Add Reminder
     </button>
 </div>
@@ -39,19 +39,18 @@
     <h3 class="text-lg font-semibold mb-4">Upcoming Reminders</h3>
     <div id="upcoming-list" class="space-y-2"></div>
 </div>
-</div>
 
 <div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
     <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2">
-            <h3 class="text-lg font-semibold">Add Reminder</h3>
-            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+            <h3 id="modal-title" class="text-lg font-semibold">Add Reminder</h3>
+            <button id="close-modal-x" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                 </svg>
             </button>
         </div>
-        <form id="reminder-form" onsubmit="saveReminder(event)">
+        <form id="reminder-form">
             <input type="hidden" name="id" id="reminder-id" value="">
             <div class="space-y-4">
                 <div>
@@ -84,7 +83,7 @@
                 </div>
                 <div id="repeat-until-field" class="hidden">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Repeat Until</label>
-                    <input type="date" name="repeat_until" max="{{ date('Y-m-d') }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                    <input type="date" name="repeat_until" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Notify Additional Email</label>
@@ -92,7 +91,7 @@
                 </div>
             </div>
             <div class="flex justify-end gap-3 mt-6">
-                <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                <button type="button" id="cancel-btn" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
                 <button type="submit" class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Save</button>
             </div>
         </form>
@@ -100,18 +99,44 @@
 </div>
 @endsection
 
+@section('scripts')
 <script>
 let currentDate = new Date();
 let reminders = [];
+
+async function apiRequest(url, options = {}) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    const defaultHeaders = {
+        'Accept': 'application/json',
+        'X-User-Id': typeof smartcashUserId !== 'undefined' ? smartcashUserId.toString() : ''
+    };
+    
+    if (csrfToken) {
+        defaultHeaders['X-CSRF-TOKEN'] = csrfToken;
+    }
+    
+    const fetchOptions = {
+        credentials: 'include',
+        headers: { ...defaultHeaders }
+    };
+    
+    if (options.method) {
+        fetchOptions.method = options.method;
+    }
+    
+    if (options.body) {
+        fetchOptions.body = JSON.stringify(options.body);
+        fetchOptions.headers['Content-Type'] = 'application/json';
+    }
+    
+    return fetch(url, fetchOptions);
+}
 
 async function loadReminders() {
     try {
         const userId = {{ session('user_id', 0) }};
         const url = userId > 0 ? `/api/v1/reminders?user_id=${userId}` : '/api/v1/reminders';
-        const response = await fetch(url, {
-            credentials: 'include',
-            headers: { 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() }
-        });
+        const response = await apiRequest(url);
         const result = await response.json();
         reminders = result.success ? result.data : [];
         renderCalendar();
@@ -125,8 +150,10 @@ function renderCalendar() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     
-    document.getElementById('current-month').textContent = 
-        new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const monthEl = document.getElementById('current-month');
+    if (monthEl) {
+        monthEl.textContent = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
     
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -134,6 +161,7 @@ function renderCalendar() {
     const daysInMonth = lastDay.getDate();
     
     const grid = document.getElementById('calendar-grid');
+    if (!grid) return;
     grid.innerHTML = '';
     
     for (let i = 0; i < startDay; i++) {
@@ -166,13 +194,16 @@ function renderCalendar() {
         });
         
         const addBtn = document.createElement('button');
+        addBtn.type = 'button';
         addBtn.className = 'text-xs text-purple-600 hover:text-purple-800 mt-1 hidden';
         addBtn.textContent = '+ Add';
         addBtn.onclick = () => {
             const date = new Date(year, month, day);
             const dateStr = date.toISOString().split('T')[0];
-            document.querySelector('input[name="reminder_date"]').value = dateStr;
-            document.querySelector('input[name="reminder_time"]').value = '09:00';
+            const dateInput = document.querySelector('input[name="reminder_date"]');
+            const timeInput = document.querySelector('input[name="reminder_time"]');
+            if (dateInput) dateInput.value = dateStr;
+            if (timeInput) timeInput.value = '09:00';
             openModal();
         };
         cell.appendChild(addBtn);
@@ -193,6 +224,8 @@ function renderCalendar() {
 
 function renderUpcoming() {
     const container = document.getElementById('upcoming-list');
+    if (!container) return;
+    
     const now = new Date();
     
     const upcoming = reminders
@@ -212,11 +245,24 @@ function renderUpcoming() {
                 <p class="text-sm text-gray-500">${r.formatted_reminder_at}${r.repeat_type ? ' (' + r.repeat_type + ')' : ''}</p>
             </div>
             <div class="flex gap-2">
-                <button onclick="editReminder(${JSON.stringify(r).replace(/"/g, '&quot;')})" class="text-blue-600 hover:text-blue-800">Edit</button>
-                <button onclick="deleteReminder(${r.id})" class="text-red-600 hover:text-red-800">Delete</button>
+                <button class="edit-btn text-blue-600 hover:text-blue-800" data-reminder='${JSON.stringify(r).replace(/'/g, "&#39;")}'>Edit</button>
+                <button class="delete-btn text-red-600 hover:text-red-800" data-id="${r.id}">Delete</button>
             </div>
         </div>
     `).join('');
+    
+    container.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const reminder = JSON.parse(this.getAttribute('data-reminder').replace(/&#39;/g, "'"));
+            editReminder(reminder);
+        });
+    });
+    
+    container.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            deleteReminder(this.getAttribute('data-id'));
+        });
+    });
 }
 
 function changeMonth(delta) {
@@ -229,51 +275,62 @@ function changeMonth(delta) {
 }
 
 function openModal() {
-    document.getElementById('modal').classList.remove('hidden');
-    document.getElementById('modal').classList.add('flex');
-    document.getElementById('reminder-id').value = '';
-    document.getElementById('reminder-form').reset();
-    document.querySelector('#modal h3').textContent = 'Add Reminder';
+    const modal = document.getElementById('modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
 }
 
 function closeModal() {
-    document.getElementById('modal').classList.add('hidden');
-    document.getElementById('modal').classList.remove('flex');
+    const modal = document.getElementById('modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
 }
 
 function editReminder(reminder) {
-    document.getElementById('reminder-id').value = reminder.id;
-    document.querySelector('input[name="title"]').value = reminder.title;
-    document.querySelector('textarea[name="description"]').value = reminder.description || '';
+    const idInput = document.getElementById('reminder-id');
+    const titleInput = document.querySelector('input[name="title"]');
+    const descInput = document.querySelector('textarea[name="description"]');
+    const repeatSelect = document.querySelector('select[name="repeat_type"]');
+    const repeatUntilInput = document.querySelector('input[name="repeat_until"]');
+    const emailInput = document.querySelector('input[name="email"]');
+    const titleEl = document.getElementById('modal-title');
     
-    const reminderDateTime = reminder.reminder_at.split(' ');
-    document.querySelector('input[name="reminder_date"]').value = reminderDateTime[0];
-    document.querySelector('input[name="reminder_time"]').value = reminderDateTime[1] ? reminderDateTime[1].substring(0, 5) : '09:00';
+    if (idInput) idInput.value = reminder.id;
+    if (titleInput) titleInput.value = reminder.title || '';
+    if (descInput) descInput.value = reminder.description || '';
     
-    document.querySelector('select[name="repeat_type"]').value = reminder.repeat_type || '';
-    document.querySelector('input[name="repeat_until"]').value = reminder.repeat_until || '';
-    document.querySelector('input[name="email"]').value = reminder.email || '';
+    const reminderDateTime = (reminder.reminder_at || '').split(' ');
+    const dateInput = document.querySelector('input[name="reminder_date"]');
+    const timeInput = document.querySelector('input[name="reminder_time"]');
+    if (dateInput) dateInput.value = reminderDateTime[0] || '';
+    if (timeInput) timeInput.value = reminderDateTime[1] ? reminderDateTime[1].substring(0, 5) : '09:00';
     
-    if (reminder.repeat_type) {
-        document.getElementById('repeat-until-field').classList.remove('hidden');
+    if (repeatSelect) repeatSelect.value = reminder.repeat_type || '';
+    if (repeatUntilInput) repeatUntilInput.value = reminder.repeat_until || '';
+    if (emailInput) emailInput.value = reminder.email || '';
+    
+    const repeatField = document.getElementById('repeat-until-field');
+    if (repeatField) {
+        if (reminder.repeat_type) {
+            repeatField.classList.remove('hidden');
+        } else {
+            repeatField.classList.add('hidden');
+        }
     }
     
-    document.querySelector('#modal h3').textContent = 'Edit Reminder';
+    if (titleEl) titleEl.textContent = 'Edit Reminder';
     openModal();
 }
-
-document.querySelector('select[name="repeat_type"]').addEventListener('change', function() {
-    const field = document.getElementById('repeat-until-field');
-    if (this.value) {
-        field.classList.remove('hidden');
-    } else {
-        field.classList.add('hidden');
-    }
-});
 
 async function saveReminder(e) {
     e.preventDefault();
     const form = document.getElementById('reminder-form');
+    if (!form) return;
+    
     const formData = new FormData(form);
     const id = formData.get('id');
     
@@ -296,11 +353,9 @@ async function saveReminder(e) {
     const method = id ? 'PUT' : 'POST';
     
     try {
-        const response = await fetch(url, {
+        const response = await apiRequest(url, {
             method: method,
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-User-Id': smartcashUserId.toString() },
-            body: JSON.stringify(data)
+            body: data
         });
         
         const result = await response.json();
@@ -320,10 +375,8 @@ async function deleteReminder(id) {
     if (!confirm('Delete this reminder?')) return;
     
     try {
-        const response = await fetch(`/api/v1/reminders/${id}`, { 
-            method: 'DELETE',
-            credentials: 'include',
-            headers: { 'X-User-Id': smartcashUserId.toString() }
+        const response = await apiRequest(`/api/v1/reminders/${id}`, { 
+            method: 'DELETE'
         });
         const result = await response.json();
         
@@ -335,5 +388,36 @@ async function deleteReminder(id) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', loadReminders);
+document.addEventListener('DOMContentLoaded', function() {
+    const prevBtn = document.getElementById('prev-month');
+    const todayBtn = document.getElementById('today-btn');
+    const nextBtn = document.getElementById('next-month');
+    const addBtn = document.getElementById('add-reminder-btn');
+    const closeX = document.getElementById('close-modal-x');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const form = document.getElementById('reminder-form');
+    const repeatSelect = document.querySelector('select[name="repeat_type"]');
+    const repeatField = document.getElementById('repeat-until-field');
+    
+    if (prevBtn) prevBtn.addEventListener('click', () => changeMonth(-1));
+    if (todayBtn) todayBtn.addEventListener('click', () => changeMonth(0));
+    if (nextBtn) nextBtn.addEventListener('click', () => changeMonth(1));
+    if (addBtn) addBtn.addEventListener('click', openModal);
+    if (closeX) closeX.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (form) form.addEventListener('submit', saveReminder);
+    
+    if (repeatSelect && repeatField) {
+        repeatSelect.addEventListener('change', function() {
+            if (this.value) {
+                repeatField.classList.remove('hidden');
+            } else {
+                repeatField.classList.add('hidden');
+            }
+        });
+    }
+    
+    loadReminders();
+});
 </script>
+@endsection

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Obligation;
 use App\Models\Receipt;
+use App\Models\Reminder;
 use App\Models\Remittance;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -78,16 +79,15 @@ class ReportController extends Controller
             ->whereBetween('due_date', [$startDate, $endDate])
             ->get();
 
-$totalExpected = (float) $obligations->sum('amount_expected');
+        $totalExpected = (float) $obligations->sum('amount_expected');
         $totalReceived = (float) $obligations->sum('amount_received');
         $totalPaid = $obligations->flatMap(fn ($o) => $o->receipts)->flatMap(fn ($r) => $r->remittances)->sum('amount_paid');
 
-        // Group by currency
         $byCurrency = $obligations->groupBy('currency')->map(function ($group, $curr) {
             $receipts = $group->flatMap(fn ($o) => $o->receipts);
             $paid = $receipts->flatMap(fn ($r) => $r->remittances)->sum('amount_paid');
             $late = $group->where('status', 'overdue')->count();
-            
+
             return [
                 'currency' => $curr ?? 'GHS',
                 'expected' => (float) $group->sum('amount_expected'),
@@ -318,12 +318,14 @@ $totalExpected = (float) $obligations->sum('amount_expected');
                         'received' => 0,
                         'remitted' => 0,
                     ],
+                    'by_currency' => [],
                 ],
             ]);
         }
 
         $obligations = Obligation::query()
-            ->where('user_id', $userId);
+            ->where('user_id', $userId)
+            ->get();
 
         $totalExpected = (float) $obligations->sum('amount_expected');
         $totalReceived = (float) $obligations->sum('amount_received');
@@ -335,6 +337,20 @@ $totalExpected = (float) $obligations->sum('amount_expected');
         $overdueCount = (clone $obligations)->where('status', 'overdue')->count();
         $receivedCount = (clone $obligations)->where('status', 'received')->count();
         $remittedCount = (clone $obligations)->where('status', 'remitted')->count();
+
+        $byCurrency = $obligations->groupBy('currency')->map(function ($group, $curr) {
+            $expected = (float) $group->sum('amount_expected');
+            $received = (float) $group->sum('amount_received');
+            $outstanding = $expected - $received;
+
+            return [
+                'currency' => $curr ?? 'GHS',
+                'expected' => $expected,
+                'received' => $received,
+                'remitted' => 0.0,
+                'outstanding' => $outstanding,
+            ];
+        })->values();
 
         return response()->json([
             'success' => true,
@@ -351,6 +367,7 @@ $totalExpected = (float) $obligations->sum('amount_expected');
                     'received' => $receivedCount,
                     'remitted' => $remittedCount,
                 ],
+                'by_currency' => $byCurrency,
             ],
         ]);
     }
@@ -447,22 +464,23 @@ $totalExpected = (float) $obligations->sum('amount_expected');
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
 
             $itemsByCurrency = $items->groupBy('currency');
-            
+
             foreach ($itemsByCurrency as $currency => $currencyItems) {
                 $symbol = $symbols[$currency] ?? '₵';
-                
+
                 fputcsv($handle, ["SmartCash - Revenue Report ($currency)"]);
                 fputcsv($handle, [
-                    'Date', 'Title', 'Type', 'Notes', 
-                    "Amount ($currency)", "Received ($currency)", "Remitted ($currency)", 
+                    'Date', 'Title', 'Type', 'Currency', 'Notes',
+                    "Amount ($currency)", "Received ($currency)", "Remitted ($currency)",
                     "Balance ($currency)", "Outstanding ($currency)", 'Status'
                 ]);
-                
+
                 foreach ($currencyItems as $item) {
                     fputcsv($handle, [
                         $item['date'],
                         $item['title'],
                         $item['type'],
+                        $currency,
                         $item['notes'],
                         $symbol . number_format($item['amount'], 2, '.', ','),
                         $symbol . number_format($item['received'], 2, '.', ','),
@@ -472,7 +490,7 @@ $totalExpected = (float) $obligations->sum('amount_expected');
                         $item['status'],
                     ]);
                 }
-                
+
                 fputcsv($handle, []); // Empty row between currencies
             }
 
@@ -573,20 +591,19 @@ $totalExpected = (float) $obligations->sum('amount_expected');
         }
 
         $itemsByCurrency = $items->groupBy('currency');
-        
+
         $html = '<html><head><style>
             body { font-family: Arial, sans-serif; padding: 20px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 40px; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
             th { background: #f5f5f5; }
-            h2 { color: #333; margin-top: 30px; }
         </style></head><body>
         <h1>SmartCash Report</h1>
         <p>Period: '.$from.' to '.$to.'</p>';
 
         foreach ($itemsByCurrency as $currency => $currencyItems) {
             $symbol = $symbols[$currency] ?? '₵';
-            
+
             $html .= '<h2>'.$currency.'</h2>';
             $html .= '<table>
                 <tr>
@@ -617,5 +634,112 @@ $totalExpected = (float) $obligations->sum('amount_expected');
         $html .= '</body></html>';
 
         return response($html, 200, ['Content-Type' => 'text/html']);
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        $userId = $this->getUserId($request);
+
+        if (! $userId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authentication required. Please login again.'
+            ], 401);
+        }
+
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt'
+        ]);
+
+        $file = $request->file('file');
+        $path = $file->getRealPath();
+        $handle = fopen($path, 'r');
+
+        $imported = 0;
+        $errors = [];
+        $row = 1;
+
+        while (($data = fgetcsv($handle)) !== false) {
+            if ($row === 1) { $row++; continue; }
+
+            if (count($data) < 7) {
+                $errors[] = "Row $row: Insufficient columns";
+                $row++;
+                continue;
+            }
+
+            $type = trim($data[0] ?? '');
+            $title = trim($data[1] ?? '');
+            $amount = trim($data[2] ?? 0);
+            $currency = trim($data[3] ?? 'GHS');
+            $date = trim($data[4] ?? '');
+            $frequency = trim($data[5] ?? '');
+            $description = trim($data[6] ?? '');
+            $repeatType = trim($data[7] ?? '');
+            $repeatUntil = trim($data[8] ?? '');
+
+            if (!in_array($type, ['obligation', 'reminder'])) {
+                $errors[] = "Row $row: Invalid type (must be 'obligation' or 'reminder')";
+                $row++;
+                continue;
+            }
+
+            if (empty($title)) {
+                $errors[] = "Row $row: Title is required";
+                $row++;
+                continue;
+            }
+
+            try {
+                if ($type === 'obligation') {
+                    $validCurrencies = ['GHS', 'USD', 'EUR', 'GBP', 'NGN'];
+                    \App\Models\Obligation::create([
+                        'user_id' => $userId,
+                        'title' => $title,
+                        'amount_expected' => floatval($amount),
+                        'currency' => in_array($currency, $validCurrencies) ? $currency : 'GHS',
+                        'due_date' => $date ?: now()->toDateString(),
+                        'frequency' => in_array($frequency, ['daily', 'weekly', 'monthly', 'yearly']) ? $frequency : 'monthly',
+                        'notes' => $description ?: null,
+                        'status' => 'pending',
+                    ]);
+                    $imported++;
+                } else {
+                    if (empty($date)) {
+                        $errors[] = "Row $row: Date is required for reminders";
+                        $row++;
+                        continue;
+                    }
+
+                    $reminderAt = $date . ' 09:00:00';
+
+                    \App\Models\Reminder::create([
+                        'user_id' => $userId,
+                        'title' => $title,
+                        'description' => $description ?: null,
+                        'reminder_at' => $reminderAt,
+                        'repeat_type' => in_array($repeatType, ['daily', 'weekly', 'monthly', 'yearly']) ? $repeatType : null,
+                        'repeat_until' => $repeatUntil ?: null,
+                        'is_active' => true,
+                    ]);
+                    $imported++;
+                }
+            } catch (\Exception $e) {
+                $errors[] = "Row $row: " . $e->getMessage();
+            }
+
+            $row++;
+        }
+
+        fclose($handle);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Import completed. Imported $imported records.",
+            'data' => [
+                'imported' => $imported,
+                'errors' => $errors
+            ]
+        ]);
     }
 }
