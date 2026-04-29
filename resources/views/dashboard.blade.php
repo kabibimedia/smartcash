@@ -295,8 +295,8 @@ loadDashboard();
 loadRecentObligations();
 </script>
 
-<div id="import-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+<div id="import-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4 sm:p-6">
+    <div class="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg mx-auto shadow-xl">
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold">Import Data</h3>
             <button onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600">

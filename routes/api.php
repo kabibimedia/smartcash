@@ -23,7 +23,7 @@ Route::prefix('v1')->group(function () {
         ]);
     });
 
-    Route::middleware(['web'])->group(function () {
+    Route::middleware(['web', 'throttle:60,1'])->group(function () {
         Route::apiResource('obligations', ObligationController::class);
         Route::apiResource('receipts', ReceiptController::class);
         Route::apiResource('reminders', ReminderController::class);
