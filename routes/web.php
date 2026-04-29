@@ -39,22 +39,28 @@ Route::post('/login', function (Request $request) {
 
 Route::post('/register', function (Request $request) {
     $validated = $request->validate([
-        'name' => 'required|string|max:255',
+        'surname' => 'required|string|max:255',
+        'first_name' => 'required|string|max:255',
+        'other_names' => 'nullable|string|max:255',
         'email' => 'required|string|email|max:255|unique:users',
+        'date_of_birth' => 'nullable|date|before:today',
         'phone' => 'nullable|string|max:20',
         'password' => 'required|string|min:8|confirmed',
     ]);
 
     $user = User::create([
-        'name' => $validated['name'],
+        'surname' => $validated['surname'],
+        'first_name' => $validated['first_name'],
+        'other_names' => $validated['other_names'] ?? null,
         'email' => $validated['email'],
+        'date_of_birth' => $validated['date_of_birth'] ?? null,
         'phone' => $validated['phone'] ?? null,
         'password' => Hash::make($validated['password']),
     ]);
 
     $user->notify(new WelcomeNotification($user));
 
-    session(['user' => $user->name, 'user_id' => $user->id]);
+    session(['user' => $user->first_name . ' ' . $user->surname, 'user_id' => $user->id]);
 
     return redirect('/dashboard')->withCookie(cookie('smartcash_uid', $user->id, 120));
 })->name('register');

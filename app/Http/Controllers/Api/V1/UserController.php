@@ -43,13 +43,16 @@ class UserController extends Controller
         }
 
         $request->validate([
-            'name' => 'sometimes|string|max:255',
+            'surname' => 'sometimes|string|max:255',
+            'first_name' => 'sometimes|string|max:255',
+            'other_names' => 'nullable|string|max:255',
+            'date_of_birth' => 'nullable|date|before:today',
             'email' => 'sometimes|string|email|max:255|unique:users,email,'.$id,
             'phone' => 'nullable|string|max:20',
         ]);
 
-        $user->update($request->only(['name', 'email', 'phone']));
-        session(['user' => $user->name]);
+        $user->update($request->only(['surname', 'first_name', 'other_names', 'date_of_birth', 'email', 'phone']));
+        session(['user' => $user->first_name . ' ' . $user->surname]);
 
         return response()->json([
             'success' => true,

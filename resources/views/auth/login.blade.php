@@ -46,8 +46,20 @@
             <form method="POST" action="{{ route('register') }}">
                 @csrf
                 <div class="mb-4">
-                    <label class="block text-gray-700 text-sm font-medium mb-2">Name</label>
-                    <input type="text" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Surname</label>
+                    <input type="text" name="surname" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">First Name</label>
+                    <input type="text" name="first_name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Other Names (optional)</label>
+                    <input type="text" name="other_names" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-medium mb-2">Date of Birth (optional)</label>
+                    <input type="date" name="date_of_birth" max="{{ date('Y-m-d') }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500">
                 </div>
                 <div class="mb-4">
                     <label class="block text-gray-700 text-sm font-medium mb-2">Email</label>

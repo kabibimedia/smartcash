@@ -12,8 +12,20 @@
         </div>
         <div class="space-y-4">
             <div>
-                <label class="block text-sm text-gray-500 mb-1">Name</label>
-                <p class="font-medium" id="user-name">{{ session('user') }}</p>
+                <label class="block text-sm text-gray-500 mb-1">Surname</label>
+                <p class="font-medium" id="user-surname">-</p>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 mb-1">First Name</label>
+                <p class="font-medium" id="user-first-name">-</p>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 mb-1">Other Names</label>
+                <p class="font-medium" id="user-other-names">-</p>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 mb-1">Date of Birth</label>
+                <p class="font-medium" id="user-dob">-</p>
             </div>
             <div>
                 <label class="block text-sm text-gray-500 mb-1">Email</label>
@@ -76,8 +88,20 @@
         <form id="profile-form" onsubmit="saveProfile(event)">
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                    <input type="text" name="name" id="edit-name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Surname</label>
+                    <input type="text" name="surname" id="edit-surname" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                    <input type="text" name="first_name" id="edit-first-name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Other Names</label>
+                    <input type="text" name="other_names" id="edit-other-names" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                    <input type="date" name="date_of_birth" id="edit-dob" max="{{ date('Y-m-d') }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -168,10 +192,17 @@ async function loadProfile() {
         if (userId > 0 && userRes.ok) {
             const user = await userRes.json();
             if (user.success && user.data) {
+                document.getElementById('user-surname').textContent = user.data.surname || '-';
+                document.getElementById('user-first-name').textContent = user.data.first_name || '-';
+                document.getElementById('user-other-names').textContent = user.data.other_names || '-';
+                document.getElementById('user-dob').textContent = user.data.date_of_birth ? new Date(user.data.date_of_birth).toLocaleDateString('en-GB') : '-';
                 document.getElementById('user-email').textContent = user.data.email || '-';
                 document.getElementById('user-phone').textContent = user.data.phone || '-';
                 document.getElementById('user-created').textContent = user.data.created_at ? new Date(user.data.created_at).toLocaleDateString('en-GB') : '-';
-                document.getElementById('edit-name').value = user.data.name || '';
+                document.getElementById('edit-surname').value = user.data.surname || '';
+                document.getElementById('edit-first-name').value = user.data.first_name || '';
+                document.getElementById('edit-other-names').value = user.data.other_names || '';
+                document.getElementById('edit-dob').value = user.data.date_of_birth || '';
                 document.getElementById('edit-email').value = user.data.email || '';
                 document.getElementById('edit-phone').value = user.data.phone || '';
             }
@@ -209,7 +240,10 @@ async function saveProfile(e) {
                 'X-CSRF-TOKEN': csrfToken
             },
             body: JSON.stringify({
-                name: formData.get('name'),
+                surname: formData.get('surname'),
+                first_name: formData.get('first_name'),
+                other_names: formData.get('other_names'),
+                date_of_birth: formData.get('date_of_birth'),
                 email: formData.get('email'),
                 phone: formData.get('phone')
             })
@@ -219,13 +253,21 @@ async function saveProfile(e) {
         
         if (result.success) {
             closeEditModal();
-            document.getElementById('user-name').textContent = result.data.name;
+            document.getElementById('user-surname').textContent = result.data.surname || '-';
+            document.getElementById('user-first-name').textContent = result.data.first_name || '-';
+            document.getElementById('user-other-names').textContent = result.data.other_names || '-';
+            document.getElementById('user-dob').textContent = result.data.date_of_birth ? new Date(result.data.date_of_birth).toLocaleDateString('en-GB') : '-';
             document.getElementById('user-email').textContent = result.data.email;
             document.getElementById('user-phone').textContent = result.data.phone || '-';
             alert('Profile updated successfully!');
         } else {
             alert(result.message || 'Error updating profile');
         }
+    } catch (error) {
+        console.error('Error saving profile:', error);
+        alert('Error saving profile: ' + error.message);
+    }
+}
     } catch (error) {
         alert('Error updating profile');
     }
