@@ -648,7 +648,7 @@ class ReportController extends Controller
         }
 
         $request->validate([
-            'file' => 'required|file|mimes:csv,txt'
+            'file' => 'required|file|mimes:csv,txt|max:2048'
         ]);
 
         $file = $request->file('file');
